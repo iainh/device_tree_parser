@@ -6,7 +6,6 @@
 extern crate alloc;
 
 pub mod dtb;
-pub mod parser;
 
 #[cfg(test)]
 mod integration_tests;
