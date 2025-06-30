@@ -1,1 +1,7 @@
 /target
+
+# Development files
+*.md
+!README.md
+.envrc
+.direnv/
