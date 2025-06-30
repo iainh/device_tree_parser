@@ -7,22 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-06-30
+
 ### Added
+- **NEW**: Ergonomic trait implementations for improved UX
+  - `Index<&str>` trait for property access: `node["property_name"]`
+  - `Index<usize>` trait for child access: `node[0]`
+  - `IntoIterator` trait for natural iteration: `for child in &node`
+  - `Display` trait for pretty-printing nodes and properties
+  - `Default` trait for creating empty instances
+  - `TryFrom` traits for type-safe property value conversions:
+    - `u32::try_from(&property_value)`
+    - `u64::try_from(&property_value)`
+    - `Vec<u32>::try_from(&property_value)`
+    - `<&str>::try_from(&property_value)`
+    - `<&[u8]>::try_from(&property_value)`
 - `std` feature support for standard library integration
 - `std::error::Error` trait implementation for `DtbError` when `std` feature is enabled
 - `Display` trait implementation for `DtbError` for better error formatting
 - Comprehensive `parse_dtb` example demonstrating all library features
 - Example showcases DTB header parsing, memory reservations, device tree traversal, and high-level APIs
+- New test suite `test_ergonomic_traits()` covering all trait implementations
 
 ### Changed
+- **ERGONOMIC**: Child iteration can now use `for child in &node` instead of `for child in node.iter_children()`
+- **ERGONOMIC**: Property access supports bracket notation: `&node["reg"]` instead of `node.find_property("reg")`
+- **ERGONOMIC**: Type conversions use standard Rust `TryFrom`: `u32::try_from(&value)` instead of custom methods
 - Library now conditionally supports `std` with `#![cfg_attr(not(feature = "std"), no_std)]`
 - Examples require `std` feature for file I/O and error handling
 - Added example configuration in `Cargo.toml` with `required-features = ["std"]`
+- Updated example code to demonstrate new ergonomic traits
+- Updated parser internals to use `IntoIterator` where beneficial
 
 ### Documentation
 - Added detailed device tree specification mapping
 - Enhanced introduction documentation for new users
 - Created comprehensive example with real DTB parsing demonstration
+- Added documentation and examples for all new ergonomic traits
+
+### Performance
+- All trait implementations are zero-cost abstractions
+- `no_std` compatibility maintained for all new traits
+- No additional memory allocations introduced by trait implementations
 
 ## [0.2.0] - 2024-06-30
 
@@ -111,6 +137,7 @@ See [MIGRATION.md](MIGRATION.md) for detailed instructions on upgrading from v0.
 - Architecture overview
 - Integration test suite with real DTB data
 
-[unreleased]: https://github.com/user/device_tree_parser/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/user/device_tree_parser/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/user/device_tree_parser/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/user/device_tree_parser/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/user/device_tree_parser/releases/tag/v0.1.0

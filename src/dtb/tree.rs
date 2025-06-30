@@ -4,6 +4,9 @@
 use super::error::DtbError;
 use super::tokens::DtbToken;
 use alloc::{vec, vec::Vec};
+use core::convert::TryFrom;
+use core::fmt::{self, Display, Formatter};
+use core::ops::Index;
 
 /// Property value types in device tree
 #[derive(Debug, Clone, PartialEq)]
@@ -241,6 +244,229 @@ impl<'a> DeviceTreeNode<'a> {
     /// Get iterator over child nodes
     pub fn iter_children(&self) -> core::slice::Iter<'_, DeviceTreeNode<'a>> {
         self.children.iter()
+    }
+}
+
+// Trait implementations for better UX
+
+/// Index trait for property access by name
+impl<'a> Index<&str> for DeviceTreeNode<'a> {
+    type Output = Property<'a>;
+
+    fn index(&self, property_name: &str) -> &Self::Output {
+        self.find_property(property_name)
+            .unwrap_or_else(|| panic!("Property '{}' not found", property_name))
+    }
+}
+
+/// Index trait for child access by index
+impl<'a> Index<usize> for DeviceTreeNode<'a> {
+    type Output = DeviceTreeNode<'a>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.children[index]
+    }
+}
+
+/// IntoIterator trait for iterating over child nodes
+impl<'a> IntoIterator for &'a DeviceTreeNode<'a> {
+    type Item = &'a DeviceTreeNode<'a>;
+    type IntoIter = core::slice::Iter<'a, DeviceTreeNode<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.children.iter()
+    }
+}
+
+/// Display trait for PropertyValue
+impl<'a> Display for PropertyValue<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PropertyValue::Empty => write!(f, "<empty>"),
+            PropertyValue::String(s) => write!(f, "\"{}\"", s),
+            PropertyValue::StringList(list) => {
+                write!(f, "[")?;
+                for (i, s) in list.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "\"{}\"", s)?;
+                }
+                write!(f, "]")
+            }
+            PropertyValue::U32(val) => write!(f, "0x{:x}", val),
+            PropertyValue::U32Array(bytes) => {
+                write!(f, "[")?;
+                for (i, chunk) in bytes.chunks_exact(4).enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    let val = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                    write!(f, "0x{:x}", val)?;
+                }
+                write!(f, "]")
+            }
+            PropertyValue::U64(val) => write!(f, "0x{:x}", val),
+            PropertyValue::U64Array(bytes) => {
+                write!(f, "[")?;
+                for (i, chunk) in bytes.chunks_exact(8).enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    let val = u64::from_be_bytes([
+                        chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6],
+                        chunk[7],
+                    ]);
+                    write!(f, "0x{:x}", val)?;
+                }
+                write!(f, "]")
+            }
+            PropertyValue::Bytes(bytes) => {
+                write!(f, "[")?;
+                for (i, byte) in bytes.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "0x{:02x}", byte)?;
+                }
+                write!(f, "]")
+            }
+        }
+    }
+}
+
+/// Display trait for Property
+impl<'a> Display for Property<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} = {}", self.name, self.value)
+    }
+}
+
+/// Display trait for DeviceTreeNode
+impl<'a> Display for DeviceTreeNode<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+impl<'a> DeviceTreeNode<'a> {
+    fn fmt_with_indent(&self, f: &mut Formatter<'_>, indent: usize) -> fmt::Result {
+        let indent_str = "  ".repeat(indent);
+
+        if self.name.is_empty() {
+            writeln!(f, "{}/ {{", indent_str)?;
+        } else {
+            writeln!(f, "{}{} {{", indent_str, self.name)?;
+        }
+
+        for property in &self.properties {
+            writeln!(f, "{}  {}", indent_str, property)?;
+        }
+
+        for child in &self.children {
+            child.fmt_with_indent(f, indent + 1)?;
+        }
+
+        writeln!(f, "{}}}", indent_str)
+    }
+}
+
+/// Default trait for DeviceTreeNode
+impl<'a> Default for DeviceTreeNode<'a> {
+    fn default() -> Self {
+        Self {
+            name: "",
+            properties: Vec::new(),
+            children: Vec::new(),
+        }
+    }
+}
+
+/// Default trait for PropertyValue
+impl<'a> Default for PropertyValue<'a> {
+    fn default() -> Self {
+        PropertyValue::Empty
+    }
+}
+
+/// TryFrom trait for converting PropertyValue to u32
+impl<'a> TryFrom<&PropertyValue<'a>> for u32 {
+    type Error = DtbError;
+
+    fn try_from(value: &PropertyValue<'a>) -> Result<Self, Self::Error> {
+        match value {
+            PropertyValue::U32(val) => Ok(*val),
+            PropertyValue::U32Array(bytes) if bytes.len() >= 4 => {
+                Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+            }
+            _ => Err(DtbError::InvalidToken),
+        }
+    }
+}
+
+/// TryFrom trait for converting PropertyValue to u64
+impl<'a> TryFrom<&PropertyValue<'a>> for u64 {
+    type Error = DtbError;
+
+    fn try_from(value: &PropertyValue<'a>) -> Result<Self, Self::Error> {
+        match value {
+            PropertyValue::U64(val) => Ok(*val),
+            PropertyValue::U64Array(bytes) if bytes.len() >= 8 => Ok(u64::from_be_bytes([
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            ])),
+            PropertyValue::U32(val) => Ok(*val as u64),
+            PropertyValue::U32Array(bytes) if bytes.len() >= 4 => {
+                let val = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                Ok(val as u64)
+            }
+            _ => Err(DtbError::InvalidToken),
+        }
+    }
+}
+
+/// TryFrom trait for converting PropertyValue to &str
+impl<'a> TryFrom<&PropertyValue<'a>> for &'a str {
+    type Error = DtbError;
+
+    fn try_from(value: &PropertyValue<'a>) -> Result<Self, Self::Error> {
+        match value {
+            PropertyValue::String(s) => Ok(*s),
+            PropertyValue::StringList(list) if !list.is_empty() => Ok(list[0]),
+            _ => Err(DtbError::InvalidToken),
+        }
+    }
+}
+
+/// TryFrom trait for converting PropertyValue to Vec<u32>
+impl<'a> TryFrom<&PropertyValue<'a>> for Vec<u32> {
+    type Error = DtbError;
+
+    fn try_from(value: &PropertyValue<'a>) -> Result<Self, Self::Error> {
+        match value {
+            PropertyValue::U32Array(bytes) => {
+                let mut values = Vec::new();
+                for chunk in bytes.chunks_exact(4) {
+                    values.push(u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+                }
+                Ok(values)
+            }
+            PropertyValue::U32(val) => Ok(vec![*val]),
+            _ => Err(DtbError::InvalidToken),
+        }
+    }
+}
+
+/// TryFrom trait for converting PropertyValue to &[u8]
+impl<'a> TryFrom<&PropertyValue<'a>> for &'a [u8] {
+    type Error = DtbError;
+
+    fn try_from(value: &PropertyValue<'a>) -> Result<Self, Self::Error> {
+        match value {
+            PropertyValue::Bytes(bytes) => Ok(*bytes),
+            PropertyValue::U32Array(bytes) => Ok(*bytes),
+            PropertyValue::U64Array(bytes) => Ok(*bytes),
+            _ => Err(DtbError::InvalidToken),
+        }
     }
 }
 
@@ -626,5 +852,62 @@ mod tests {
         assert_eq!(node.prop_bytes("bytes-prop"), Some(&[1, 2, 3, 4][..]));
         assert!(node.has_property("empty-prop"));
         assert!(!node.has_property("nonexistent"));
+    }
+
+    #[test]
+    fn test_ergonomic_traits() {
+        use core::convert::TryFrom;
+        
+        let mut node = DeviceTreeNode::new("test");
+        let mut child = DeviceTreeNode::new("child");
+        
+        // Add properties to test Index and TryFrom traits
+        node.add_property(Property {
+            name: "test-u32",
+            value: PropertyValue::U32(42),
+        });
+        
+        node.add_property(Property {
+            name: "test-string",
+            value: PropertyValue::String("hello"),
+        });
+
+        child.add_property(Property {
+            name: "child-prop",
+            value: PropertyValue::U32(100),
+        });
+        
+        node.add_child(child);
+
+        // Test Index trait for property access
+        assert_eq!(node["test-u32"].name, "test-u32");
+        assert_eq!(node["test-string"].name, "test-string");
+
+        // Test Index trait for child access
+        assert_eq!(node[0].name, "child");
+
+        // Test IntoIterator trait
+        let mut child_count = 0;
+        for child in &node {
+            child_count += 1;
+            assert_eq!(child.name, "child");
+        }
+        assert_eq!(child_count, 1);
+
+        // Test TryFrom trait
+        let u32_val: u32 = u32::try_from(&node["test-u32"].value).unwrap();
+        assert_eq!(u32_val, 42);
+
+        let str_val: &str = <&str>::try_from(&node["test-string"].value).unwrap();
+        assert_eq!(str_val, "hello");
+
+        // Test Default trait
+        let default_node = DeviceTreeNode::default();
+        assert_eq!(default_node.name, "");
+        assert!(default_node.properties.is_empty());
+        assert!(default_node.children.is_empty());
+
+        let default_value = PropertyValue::default();
+        assert_eq!(default_value, PropertyValue::Empty);
     }
 }

@@ -100,7 +100,7 @@ impl<'a> DeviceTreeParser<'a> {
             }
 
             // Check individual CPU nodes
-            for cpu in cpus_node.iter_children() {
+            for cpu in cpus_node {
                 if let Some(freq) = cpu.prop_u32("timebase-frequency") {
                     return Ok(Some(freq));
                 }
