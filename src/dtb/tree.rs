@@ -857,16 +857,16 @@ mod tests {
     #[test]
     fn test_ergonomic_traits() {
         use core::convert::TryFrom;
-        
+
         let mut node = DeviceTreeNode::new("test");
         let mut child = DeviceTreeNode::new("child");
-        
+
         // Add properties to test Index and TryFrom traits
         node.add_property(Property {
             name: "test-u32",
             value: PropertyValue::U32(42),
         });
-        
+
         node.add_property(Property {
             name: "test-string",
             value: PropertyValue::String("hello"),
@@ -876,7 +876,7 @@ mod tests {
             name: "child-prop",
             value: PropertyValue::U32(100),
         });
-        
+
         node.add_child(child);
 
         // Test Index trait for property access

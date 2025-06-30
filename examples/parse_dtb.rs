@@ -1,8 +1,8 @@
 // ABOUTME: Example demonstrating device tree parsing capabilities
 // ABOUTME: Shows DTB header parsing, tree traversal, and device discovery
 
-use device_tree_parser::{DeviceTreeParser, DtbError};
 use core::convert::TryFrom;
+use device_tree_parser::{DeviceTreeParser, DtbError};
 use std::env;
 use std::fs;
 use std::process;
@@ -317,19 +317,28 @@ fn demonstrate_high_level_api(parser: &DeviceTreeParser) -> Result<(), DtbError>
     // Demonstrate new ergonomic traits
     println!("🎯 Ergonomic API Examples");
     println!("─────────────────────────");
-    
+
     // Using Index trait for property access
     if let Some(cpus_node) = tree.find_node("/cpus") {
         if cpus_node.has_property("#address-cells") {
-            println!("✅ Using Index trait: #address-cells = {}", cpus_node["#address-cells"].value);
+            println!(
+                "✅ Using Index trait: #address-cells = {}",
+                cpus_node["#address-cells"].value
+            );
         }
     }
-    
+
     // Using TryFrom for type conversions
-    if let Some(memory_node) = tree.iter_nodes().find(|n| n.prop_string("device_type") == Some("memory")) {
+    if let Some(memory_node) = tree
+        .iter_nodes()
+        .find(|n| n.prop_string("device_type") == Some("memory"))
+    {
         if let Some(reg_property) = memory_node.find_property("reg") {
             match Vec::<u32>::try_from(&reg_property.value) {
-                Ok(reg_values) => println!("✅ Using TryFrom: parsed {} u32 values from reg property", reg_values.len()),
+                Ok(reg_values) => println!(
+                    "✅ Using TryFrom: parsed {} u32 values from reg property",
+                    reg_values.len()
+                ),
                 Err(_) => println!("❌ Could not convert reg property to Vec<u32>"),
             }
         }
