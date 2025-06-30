@@ -4,7 +4,6 @@
 use super::error::DtbError;
 use alloc::vec::Vec;
 
-
 /// Memory reservation entry with address and size
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryReservation {

@@ -139,10 +139,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Find all nodes with a specific compatible string
-    pub fn find_compatible_nodes(
-        &self,
-        compatible: &str,
-    ) -> Result<Vec<DeviceTreeNode>, DtbError> {
+    pub fn find_compatible_nodes(&self, compatible: &str) -> Result<Vec<DeviceTreeNode>, DtbError> {
         let root = self.parse_tree()?;
         let nodes = root.find_compatible_nodes(compatible);
         Ok(nodes.into_iter().cloned().collect())
