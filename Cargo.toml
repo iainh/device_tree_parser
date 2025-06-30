@@ -7,6 +7,9 @@ license = "MIT"
 [lib]
 name = "device_tree_parser"
 
+[features]
+std = []
+
 [dependencies]
 
 [dev-dependencies]
@@ -15,3 +18,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "dtb_parsing"
 harness = false
+
+[[example]]
+name = "parse_dtb"
+required-features = ["std"]

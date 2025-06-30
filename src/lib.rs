@@ -1,7 +1,7 @@
 // ABOUTME: Device tree parser library using nom combinators
 // ABOUTME: Provides parsing functionality for device tree files and formats
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 

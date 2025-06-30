@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `std` feature support for standard library integration
+- `std::error::Error` trait implementation for `DtbError` when `std` feature is enabled
+- `Display` trait implementation for `DtbError` for better error formatting
+- Comprehensive `parse_dtb` example demonstrating all library features
+- Example showcases DTB header parsing, memory reservations, device tree traversal, and high-level APIs
+
+### Changed
+- Library now conditionally supports `std` with `#![cfg_attr(not(feature = "std"), no_std)]`
+- Examples require `std` feature for file I/O and error handling
+- Added example configuration in `Cargo.toml` with `required-features = ["std"]`
+
+### Documentation
+- Added detailed device tree specification mapping
+- Enhanced introduction documentation for new users
+- Created comprehensive example with real DTB parsing demonstration
+
 ## [0.2.0] - 2024-06-30
 
 ### Added
