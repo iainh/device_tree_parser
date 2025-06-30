@@ -12,7 +12,7 @@ pub mod dtb;
 pub mod parser;
 
 // Re-export main types
-pub use dtb::{DeviceTreeParser, DtbError, DtbHeader};
+pub use dtb::{DeviceTreeParser, DtbError, DtbHeader, MemoryReservation};
 
 #[cfg(test)]
 mod tests {
