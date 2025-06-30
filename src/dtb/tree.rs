@@ -462,6 +462,209 @@ impl<'a> DeviceTreeNode<'a> {
         self.find_property(name).is_some()
     }
 
+    /// Get the number of address cells for this node.
+    ///
+    /// Returns the value of the `#address-cells` property, which specifies how many
+    /// 32-bit cells are required to represent an address in child nodes. According
+    /// to the device tree specification, this defaults to 2 if not specified.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidAddressCells` if the property value is outside
+    /// the valid range (1-4).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(node: &DeviceTreeNode) -> Result<(), DtbError> {
+    /// let address_cells = node.address_cells()?;
+    /// println!("Address cells: {}", address_cells);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn address_cells(&self) -> Result<u32, DtbError> {
+        match self.prop_u32("#address-cells") {
+            Some(cells) => {
+                if cells == 0 || cells > AddressSpec::MAX_ADDRESS_CELLS {
+                    Err(DtbError::InvalidAddressCells(cells))
+                } else {
+                    Ok(cells)
+                }
+            }
+            None => Ok(AddressSpec::DEFAULT_ADDRESS_CELLS), // Default to 2
+        }
+    }
+
+    /// Get the number of size cells for this node.
+    ///
+    /// Returns the value of the `#size-cells` property, which specifies how many
+    /// 32-bit cells are required to represent a size in child nodes. According
+    /// to the device tree specification, this defaults to 1 if not specified.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidSizeCells` if the property value is outside
+    /// the valid range (0-4).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(node: &DeviceTreeNode) -> Result<(), DtbError> {
+    /// let size_cells = node.size_cells()?;
+    /// println!("Size cells: {}", size_cells);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn size_cells(&self) -> Result<u32, DtbError> {
+        match self.prop_u32("#size-cells") {
+            Some(cells) => {
+                if cells > AddressSpec::MAX_SIZE_CELLS {
+                    Err(DtbError::InvalidSizeCells(cells))
+                } else {
+                    Ok(cells)
+                }
+            }
+            None => Ok(AddressSpec::DEFAULT_SIZE_CELLS), // Default to 1
+        }
+    }
+
+    /// Get the number of address cells for child nodes, with parent inheritance.
+    ///
+    /// This method searches for `#address-cells` property in this node first,
+    /// then falls back to the parent node if not found, following the device
+    /// tree specification for property inheritance.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Optional parent node for inheritance fallback
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidAddressCells` if the property value is outside
+    /// the valid range (1-4).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(node: &DeviceTreeNode, parent: Option<&DeviceTreeNode>) -> Result<(), DtbError> {
+    /// let address_cells = node.address_cells_with_parent(parent)?;
+    /// println!("Address cells: {}", address_cells);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn address_cells_with_parent(
+        &self,
+        parent: Option<&DeviceTreeNode<'a>>,
+    ) -> Result<u32, DtbError> {
+        // First check this node
+        if let Some(cells) = self.prop_u32("#address-cells") {
+            if cells == 0 || cells > AddressSpec::MAX_ADDRESS_CELLS {
+                return Err(DtbError::InvalidAddressCells(cells));
+            }
+            return Ok(cells);
+        }
+
+        // Then check parent node
+        if let Some(parent_node) = parent {
+            if let Some(cells) = parent_node.prop_u32("#address-cells") {
+                if cells == 0 || cells > AddressSpec::MAX_ADDRESS_CELLS {
+                    return Err(DtbError::InvalidAddressCells(cells));
+                }
+                return Ok(cells);
+            }
+        }
+
+        // Default fallback
+        Ok(AddressSpec::DEFAULT_ADDRESS_CELLS)
+    }
+
+    /// Get the number of size cells for child nodes, with parent inheritance.
+    ///
+    /// This method searches for `#size-cells` property in this node first,
+    /// then falls back to the parent node if not found, following the device
+    /// tree specification for property inheritance.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Optional parent node for inheritance fallback
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidSizeCells` if the property value is outside
+    /// the valid range (0-4).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(node: &DeviceTreeNode, parent: Option<&DeviceTreeNode>) -> Result<(), DtbError> {
+    /// let size_cells = node.size_cells_with_parent(parent)?;
+    /// println!("Size cells: {}", size_cells);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn size_cells_with_parent(
+        &self,
+        parent: Option<&DeviceTreeNode<'a>>,
+    ) -> Result<u32, DtbError> {
+        // First check this node
+        if let Some(cells) = self.prop_u32("#size-cells") {
+            if cells > AddressSpec::MAX_SIZE_CELLS {
+                return Err(DtbError::InvalidSizeCells(cells));
+            }
+            return Ok(cells);
+        }
+
+        // Then check parent node
+        if let Some(parent_node) = parent {
+            if let Some(cells) = parent_node.prop_u32("#size-cells") {
+                if cells > AddressSpec::MAX_SIZE_CELLS {
+                    return Err(DtbError::InvalidSizeCells(cells));
+                }
+                return Ok(cells);
+            }
+        }
+
+        // Default fallback
+        Ok(AddressSpec::DEFAULT_SIZE_CELLS)
+    }
+
+    /// Creates an AddressSpec for this node using proper inheritance rules.
+    ///
+    /// This is a convenience method that combines address_cells and size_cells
+    /// with parent inheritance support to create a validated AddressSpec.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Optional parent node for inheritance fallback
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidAddressCells` or `DtbError::InvalidSizeCells`
+    /// if the property values are outside valid ranges.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(node: &DeviceTreeNode, parent: Option<&DeviceTreeNode>) -> Result<(), DtbError> {
+    /// let spec = node.create_address_spec(parent)?;
+    /// println!("Address spec: {}+{} cells", spec.address_cells(), spec.size_cells());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn create_address_spec(
+        &self,
+        parent: Option<&DeviceTreeNode<'a>>,
+    ) -> Result<AddressSpec, DtbError> {
+        let address_cells = self.address_cells_with_parent(parent)?;
+        let size_cells = self.size_cells_with_parent(parent)?;
+        AddressSpec::new(address_cells, size_cells)
+    }
+
     /// Get all nodes with a specific property
     #[must_use]
     pub fn find_nodes_with_property(&self, property_name: &str) -> Vec<&DeviceTreeNode<'a>> {
@@ -1267,5 +1470,216 @@ mod tests {
 
         let default_value = PropertyValue::default();
         assert_eq!(default_value, PropertyValue::Empty);
+    }
+
+    #[test]
+    fn test_address_cells_parsing() {
+        // Test node with explicit #address-cells property
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+
+        assert_eq!(node.address_cells().unwrap(), 2);
+
+        // Test with invalid address cells (0)
+        let mut invalid_node = DeviceTreeNode::new("test");
+        invalid_node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(0),
+        });
+
+        assert!(matches!(
+            invalid_node.address_cells(),
+            Err(DtbError::InvalidAddressCells(0))
+        ));
+
+        // Test with invalid address cells (too high)
+        let mut invalid_node2 = DeviceTreeNode::new("test");
+        invalid_node2.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(5),
+        });
+
+        assert!(matches!(
+            invalid_node2.address_cells(),
+            Err(DtbError::InvalidAddressCells(5))
+        ));
+
+        // Test default value when property is missing
+        let empty_node = DeviceTreeNode::new("test");
+        assert_eq!(
+            empty_node.address_cells().unwrap(),
+            AddressSpec::DEFAULT_ADDRESS_CELLS
+        );
+    }
+
+    #[test]
+    fn test_size_cells_parsing() {
+        // Test node with explicit #size-cells property
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        assert_eq!(node.size_cells().unwrap(), 1);
+
+        // Test with size cells = 0 (valid for address-only nodes)
+        let mut zero_size_node = DeviceTreeNode::new("test");
+        zero_size_node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(0),
+        });
+
+        assert_eq!(zero_size_node.size_cells().unwrap(), 0);
+
+        // Test with invalid size cells (too high)
+        let mut invalid_node = DeviceTreeNode::new("test");
+        invalid_node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(5),
+        });
+
+        assert!(matches!(
+            invalid_node.size_cells(),
+            Err(DtbError::InvalidSizeCells(5))
+        ));
+
+        // Test default value when property is missing
+        let empty_node = DeviceTreeNode::new("test");
+        assert_eq!(
+            empty_node.size_cells().unwrap(),
+            AddressSpec::DEFAULT_SIZE_CELLS
+        );
+    }
+
+    #[test]
+    fn test_address_cells_with_parent_inheritance() {
+        // Create parent node with #address-cells
+        let mut parent = DeviceTreeNode::new("parent");
+        parent.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(3),
+        });
+
+        // Create child node without #address-cells
+        let child = DeviceTreeNode::new("child");
+
+        // Test inheritance from parent
+        assert_eq!(child.address_cells_with_parent(Some(&parent)).unwrap(), 3);
+
+        // Test child with its own property overrides parent
+        let mut child_with_prop = DeviceTreeNode::new("child");
+        child_with_prop.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        assert_eq!(
+            child_with_prop
+                .address_cells_with_parent(Some(&parent))
+                .unwrap(),
+            1
+        );
+
+        // Test no parent fallback to default
+        assert_eq!(
+            child.address_cells_with_parent(None).unwrap(),
+            AddressSpec::DEFAULT_ADDRESS_CELLS
+        );
+
+        // Test invalid value in parent
+        let mut invalid_parent = DeviceTreeNode::new("parent");
+        invalid_parent.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(0),
+        });
+
+        assert!(matches!(
+            child.address_cells_with_parent(Some(&invalid_parent)),
+            Err(DtbError::InvalidAddressCells(0))
+        ));
+    }
+
+    #[test]
+    fn test_size_cells_with_parent_inheritance() {
+        // Create parent node with #size-cells
+        let mut parent = DeviceTreeNode::new("parent");
+        parent.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(2),
+        });
+
+        // Create child node without #size-cells
+        let child = DeviceTreeNode::new("child");
+
+        // Test inheritance from parent
+        assert_eq!(child.size_cells_with_parent(Some(&parent)).unwrap(), 2);
+
+        // Test child with its own property overrides parent
+        let mut child_with_prop = DeviceTreeNode::new("child");
+        child_with_prop.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(0),
+        });
+
+        assert_eq!(
+            child_with_prop
+                .size_cells_with_parent(Some(&parent))
+                .unwrap(),
+            0
+        );
+
+        // Test no parent fallback to default
+        assert_eq!(
+            child.size_cells_with_parent(None).unwrap(),
+            AddressSpec::DEFAULT_SIZE_CELLS
+        );
+    }
+
+    #[test]
+    fn test_create_address_spec() {
+        // Test creating AddressSpec from node properties
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        let spec = node.create_address_spec(None).unwrap();
+        assert_eq!(spec.address_cells(), 2);
+        assert_eq!(spec.size_cells(), 1);
+        assert_eq!(spec.total_cells(), 3);
+
+        // Test with parent inheritance
+        let mut parent = DeviceTreeNode::new("parent");
+        parent.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(1),
+        });
+        parent.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(2),
+        });
+
+        let child = DeviceTreeNode::new("child");
+        let spec_with_parent = child.create_address_spec(Some(&parent)).unwrap();
+        assert_eq!(spec_with_parent.address_cells(), 1);
+        assert_eq!(spec_with_parent.size_cells(), 2);
+
+        // Test default values when no properties exist
+        let empty_node = DeviceTreeNode::new("empty");
+        let default_spec = empty_node.create_address_spec(None).unwrap();
+        assert_eq!(
+            default_spec.address_cells(),
+            AddressSpec::DEFAULT_ADDRESS_CELLS
+        );
+        assert_eq!(default_spec.size_cells(), AddressSpec::DEFAULT_SIZE_CELLS);
     }
 }
