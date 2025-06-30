@@ -203,8 +203,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-- v0.1.0 - Initial release with DTB parsing support
-  - Binary DTB format parsing
-  - Memory reservation block support
-  - Device tree traversal and property access
-  - Integration tests with QEMU DTB data
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
