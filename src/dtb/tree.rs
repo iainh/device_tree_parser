@@ -437,7 +437,7 @@ impl<'a> TryFrom<&PropertyValue<'a>> for &'a str {
     }
 }
 
-/// TryFrom trait for converting PropertyValue to Vec<u32>
+/// TryFrom trait for converting PropertyValue to `Vec<u32>`
 impl<'a> TryFrom<&PropertyValue<'a>> for Vec<u32> {
     type Error = DtbError;
 
