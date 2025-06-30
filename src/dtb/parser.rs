@@ -26,13 +26,13 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Parse the DTB header
-    pub fn parse_header(&self) -> Result<DtbHeader, DtbError<&[u8]>> {
+    pub fn parse_header(&self) -> Result<DtbHeader, DtbError> {
         let (_remaining, header) = DtbHeader::parse(self.data)?;
         Ok(header)
     }
 
     /// Parse memory reservations
-    pub fn parse_memory_reservations(&self) -> Result<Vec<MemoryReservation>, DtbError<&[u8]>> {
+    pub fn parse_memory_reservations(&self) -> Result<Vec<MemoryReservation>, DtbError> {
         let header = self.parse_header()?;
         let reservation_data = &self.data[header.off_mem_rsvmap as usize..];
         let (_remaining, reservations) = MemoryReservation::parse_all(reservation_data)?;
@@ -40,7 +40,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Parse the complete device tree structure
-    pub fn parse_tree(&self) -> Result<DeviceTreeNode, DtbError<&[u8]>> {
+    pub fn parse_tree(&self) -> Result<DeviceTreeNode, DtbError> {
         let header = self.parse_header()?;
 
         let struct_block_start = header.off_dt_struct as usize;
@@ -61,7 +61,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Find UART device addresses
-    pub fn uart_addresses(&self) -> Result<Vec<u64>, DtbError<&[u8]>> {
+    pub fn uart_addresses(&self) -> Result<Vec<u64>, DtbError> {
         let root = self.parse_tree()?;
         let mut addresses = Vec::new();
 
@@ -90,7 +90,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Get timebase frequency from CPU node
-    pub fn timebase_frequency(&self) -> Result<Option<u32>, DtbError<&[u8]>> {
+    pub fn timebase_frequency(&self) -> Result<Option<u32>, DtbError> {
         let root = self.parse_tree()?;
 
         // Look in /cpus node first
@@ -111,7 +111,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Discover MMIO regions from device tree
-    pub fn discover_mmio_regions(&self) -> Result<Vec<(u64, u64)>, DtbError<&[u8]>> {
+    pub fn discover_mmio_regions(&self) -> Result<Vec<(u64, u64)>, DtbError> {
         let root = self.parse_tree()?;
         let mut regions = Vec::new();
 
@@ -133,7 +133,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Find node by path
-    pub fn find_node(&self, path: &str) -> Result<Option<DeviceTreeNode>, DtbError<&[u8]>> {
+    pub fn find_node(&self, path: &str) -> Result<Option<DeviceTreeNode>, DtbError> {
         let root = self.parse_tree()?;
         Ok(root.find_node(path).cloned())
     }
@@ -142,7 +142,7 @@ impl<'a> DeviceTreeParser<'a> {
     pub fn find_compatible_nodes(
         &self,
         compatible: &str,
-    ) -> Result<Vec<DeviceTreeNode>, DtbError<&[u8]>> {
+    ) -> Result<Vec<DeviceTreeNode>, DtbError> {
         let root = self.parse_tree()?;
         let nodes = root.find_compatible_nodes(compatible);
         Ok(nodes.into_iter().cloned().collect())
@@ -153,7 +153,7 @@ impl<'a> DeviceTreeParser<'a> {
         &self,
         struct_block: &'b [u8],
         strings_block: &'b [u8],
-    ) -> Result<DeviceTreeNode, DtbError<&'b [u8]>> {
+    ) -> Result<DeviceTreeNode, DtbError> {
         parse_device_tree_iterative(struct_block, strings_block)
     }
 }
@@ -162,7 +162,7 @@ impl<'a> DeviceTreeParser<'a> {
 fn parse_device_tree_iterative<'a>(
     mut input: &'a [u8],
     strings_block: &'a [u8],
-) -> Result<DeviceTreeNode, DtbError<&'a [u8]>> {
+) -> Result<DeviceTreeNode, DtbError> {
     use alloc::vec::Vec;
 
     // Stack to keep track of node hierarchy

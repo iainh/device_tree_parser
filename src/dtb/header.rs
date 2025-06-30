@@ -36,7 +36,7 @@ impl DtbHeader {
     pub const SIZE: usize = 40;
 
     /// Parse DTB header from input bytes
-    pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError<&[u8]>> {
+    pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError> {
         if input.len() < Self::SIZE {
             return Err(DtbError::MalformedHeader);
         }

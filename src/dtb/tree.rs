@@ -266,7 +266,7 @@ impl<'a> Iterator for NodeIterator<'a> {
 }
 
 /// Parse a null-terminated string from bytes
-pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], String), DtbError<&[u8]>> {
+pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], String), DtbError> {
     let null_pos = input
         .iter()
         .position(|&b| b == 0)
@@ -281,7 +281,7 @@ pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], String), Dtb
 }
 
 /// Parse node name after FDT_BEGIN_NODE token
-pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], String), DtbError<&[u8]>> {
+pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], String), DtbError> {
     let (remaining, name) = parse_null_terminated_string(input)?;
 
     // Skip padding to 4-byte alignment
@@ -299,7 +299,7 @@ pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], String), DtbError<&[u8]>>
 pub fn parse_property_data<'a>(
     input: &'a [u8],
     strings_block: &'a [u8],
-) -> Result<(&'a [u8], Property), DtbError<&'a [u8]>> {
+) -> Result<(&'a [u8], Property), DtbError> {
     if input.len() < 8 {
         return Err(DtbError::MalformedHeader);
     }
@@ -335,7 +335,7 @@ pub fn parse_property_data<'a>(
 }
 
 /// Resolve property name from strings block using offset
-fn resolve_property_name(strings_block: &[u8], offset: usize) -> Result<String, DtbError<&[u8]>> {
+fn resolve_property_name(strings_block: &[u8], offset: usize) -> Result<String, DtbError> {
     if offset >= strings_block.len() {
         return Err(DtbError::MalformedHeader);
     }

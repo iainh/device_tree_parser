@@ -4,8 +4,6 @@
 use super::error::DtbError;
 use alloc::vec::Vec;
 
-/// Type alias for memory reservation parsing result
-type MemoryReservationResult<'a> = Result<(&'a [u8], Vec<MemoryReservation>), DtbError<&'a [u8]>>;
 
 /// Memory reservation entry with address and size
 #[derive(Debug, Clone, PartialEq)]
@@ -21,7 +19,7 @@ impl MemoryReservation {
     pub const SIZE: usize = 16;
 
     /// Parse memory reservations from input bytes
-    pub fn parse_all(input: &[u8]) -> MemoryReservationResult<'_> {
+    pub fn parse_all(input: &[u8]) -> Result<(&[u8], Vec<Self>), DtbError> {
         // Ensure 8-byte alignment
         if (input.as_ptr() as usize) % 8 != 0 {
             return Err(DtbError::AlignmentError);

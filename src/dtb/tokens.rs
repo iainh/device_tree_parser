@@ -27,7 +27,7 @@ impl DtbToken {
     pub const FDT_END: u32 = 0x00000009;
 
     /// Convert u32 value to DtbToken
-    pub fn from_u32(value: u32) -> Result<Self, DtbError<&'static [u8]>> {
+    pub fn from_u32(value: u32) -> Result<Self, DtbError> {
         match value {
             Self::FDT_BEGIN_NODE => Ok(DtbToken::BeginNode),
             Self::FDT_END_NODE => Ok(DtbToken::EndNode),
@@ -48,7 +48,7 @@ impl DtbToken {
     }
 
     /// Parse a single token from input bytes with 4-byte alignment
-    pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError<&[u8]>> {
+    pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError> {
         if input.len() < 4 {
             return Err(DtbError::MalformedHeader);
         }
