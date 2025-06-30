@@ -8,44 +8,188 @@ use core::convert::TryFrom;
 use core::fmt::{self, Display, Formatter};
 use core::ops::Index;
 
-/// Property value types in device tree
+/// Strongly-typed property values in device trees.
+///
+/// Device tree properties can contain various data types. Provides type-safe
+/// access to property values with zero-copy parsing from the original DTB buffer.
+/// Use the ergonomic `TryFrom` traits for type conversions.
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::{PropertyValue, DtbError};
+/// # use std::convert::TryFrom;
+/// # fn example(value: &PropertyValue) -> Result<(), DtbError> {
+/// match value {
+///     PropertyValue::String(s) => println!("String: {}", s),
+///     PropertyValue::U32(n) => println!("Number: {}", n),
+///     PropertyValue::U32Array(_) => {
+///         // Use TryFrom for ergonomic access
+///         let numbers: Vec<u32> = Vec::<u32>::try_from(value)?;
+///         println!("Array: {:?}", numbers);
+///     }
+///     PropertyValue::Bytes(data) => println!("Raw data: {} bytes", data.len()),
+///     _ => {}
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyValue<'a> {
-    /// Empty property
+    /// Empty property (property exists but has no value).
     Empty,
-    /// String value
+    /// Null-terminated string value.
+    ///
+    /// Common for device names, compatible strings, and text properties.
     String(&'a str),
-    /// Multiple string values
+    /// Multiple null-terminated strings in sequence.
+    ///
+    /// Used for properties like `compatible` that list multiple values.
     StringList(Vec<&'a str>),
-    /// 32-bit unsigned integer
+    /// 32-bit unsigned integer value.
+    ///
+    /// Common for simple numeric properties like counts and flags.
     U32(u32),
-    /// Array of 32-bit unsigned integers (stored as raw bytes)
+    /// Array of 32-bit unsigned integers (stored as raw bytes for zero-copy).
+    ///
+    /// Use `Vec::<u32>::try_from()` for ergonomic access. Common for register
+    /// addresses, interrupt numbers, and GPIO specifications.
     U32Array(&'a [u8]),
-    /// 64-bit unsigned integer
+    /// 64-bit unsigned integer value.
+    ///
+    /// Used for large addresses and sizes in 64-bit systems.
     U64(u64),
-    /// Array of 64-bit unsigned integers (stored as raw bytes)
+    /// Array of 64-bit unsigned integers (stored as raw bytes for zero-copy).
+    ///
+    /// Use `Vec::<u64>::try_from()` for ergonomic access.
     U64Array(&'a [u8]),
-    /// Raw byte array
+    /// Raw byte array for binary data.
+    ///
+    /// Used for MAC addresses, binary blobs, and vendor-specific data.
     Bytes(&'a [u8]),
 }
 
-/// Device tree property
+/// Device tree property with name and typed value.
+///
+/// Properties are key-value pairs that describe characteristics of device tree
+/// nodes. Can represent hardware registers, compatible strings, interrupt
+/// mappings, and other device characteristics.
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::{Property, PropertyValue};
+/// # use std::convert::TryFrom;
+/// # fn example(prop: &Property) {
+/// println!("Property: {} = {}", prop.name, prop.value);
+///
+/// // Type-safe value extraction
+/// match &prop.value {
+///     PropertyValue::String(s) => println!("String property: {}", s),
+///     PropertyValue::U32(n) => println!("Numeric property: {}", n),
+///     _ => {}
+/// }
+///
+/// // Ergonomic type conversion
+/// if let Ok(address) = u32::try_from(&prop.value) {
+///     println!("Address: 0x{:08x}", address);
+/// }
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct Property<'a> {
-    /// Property name
+    /// Property name (e.g., "compatible", "reg", "interrupts").
     pub name: &'a str,
-    /// Property value
+    /// Strongly-typed property value.
     pub value: PropertyValue<'a>,
 }
 
-/// Device tree node
+/// Device tree node representing a hardware component or logical grouping.
+///
+/// Device tree nodes form a hierarchical structure describing system hardware.
+/// Each node has a name, properties describing its characteristics, and optionally
+/// child nodes. Provides ergonomic access through Index traits, IntoIterator,
+/// and search methods.
+///
+/// # Examples
+///
+/// ## Basic Access
+///
+/// ```rust
+/// # use device_tree_parser::{DeviceTreeNode, PropertyValue};
+/// # fn example(node: &DeviceTreeNode) {
+/// println!("Node: {}", node.name);
+/// println!("Properties: {}", node.properties.len());
+/// println!("Children: {}", node.children.len());
+///
+/// // Find specific properties
+/// if let Some(prop) = node.find_property("compatible") {
+///     println!("Compatible: {}", prop.value);
+/// }
+/// # }
+/// ```
+///
+/// ## Ergonomic Access (v0.3.0+)
+///
+/// ```rust
+/// # use device_tree_parser::{DeviceTreeNode, DtbError};
+/// # use std::convert::TryFrom;
+/// # fn example(node: &DeviceTreeNode) -> Result<(), DtbError> {
+/// // Property access using Index trait
+/// if node.has_property("reg") {
+///     let reg_prop = &node["reg"];
+///     println!("Register: {}", reg_prop.value);
+/// }
+///
+/// // Child access using Index trait
+/// if !node.children.is_empty() {
+///     let first_child = &node[0];
+///     println!("First child: {}", first_child.name);
+/// }
+///
+/// // Natural iteration over children
+/// for child in node {
+///     println!("Child: {}", child.name);
+/// }
+///
+/// // Type-safe property conversion
+/// if let Some(prop) = node.find_property("reg") {
+///     let addresses: Vec<u32> = Vec::<u32>::try_from(&prop.value)?;
+///     println!("Addresses: {:?}", addresses);
+/// }
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Hardware Discovery
+///
+/// ```rust
+/// # use device_tree_parser::DeviceTreeNode;
+/// # fn example(root: &DeviceTreeNode) {
+/// // Find specific nodes by path
+/// if let Some(chosen) = root.find_node("/chosen") {
+///     println!("Found chosen node");
+/// }
+///
+/// // Find nodes by device type
+/// let memory_nodes: Vec<_> = root
+///     .iter_nodes()
+///     .filter(|n| n.prop_string("device_type") == Some("memory"))
+///     .collect();
+/// println!("Found {} memory nodes", memory_nodes.len());
+///
+/// // Find compatible devices
+/// let uart_nodes = root.find_compatible_nodes("arm,pl011");
+/// println!("Found {} UART devices", uart_nodes.len());
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct DeviceTreeNode<'a> {
-    /// Node name
+    /// Node name (e.g., "cpu@0", "memory@40000000", "uart@9000000").
     pub name: &'a str,
-    /// Node properties
+    /// Properties describing this node's characteristics.
     pub properties: Vec<Property<'a>>,
-    /// Child nodes
+    /// Child nodes in the device tree hierarchy.
     pub children: Vec<DeviceTreeNode<'a>>,
 }
 

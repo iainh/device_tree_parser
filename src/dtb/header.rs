@@ -3,28 +3,79 @@
 
 use super::error::DtbError;
 
-/// DTB header structure (40 bytes total)
+/// Device Tree Blob header containing file metadata and block layout.
+///
+/// Fixed 40-byte structure at the beginning of every DTB file. Contains essential
+/// information for parsing the file including block offsets, sizes, and version
+/// information.
+///
+/// # Layout
+///
+/// The header follows this exact layout (all fields are big-endian u32):
+/// ```text
+/// Offset | Field              | Description
+/// -------|--------------------|-----------------------------------------
+/// 0x00   | magic              | Magic number (0xd00dfeed)
+/// 0x04   | totalsize          | Total DTB file size in bytes
+/// 0x08   | off_dt_struct      | Offset to structure block
+/// 0x0C   | off_dt_strings     | Offset to strings block  
+/// 0x10   | off_mem_rsvmap     | Offset to memory reservation block
+/// 0x14   | version            | DTB format version
+/// 0x18   | last_comp_version  | Last compatible DTB version
+/// 0x1C   | boot_cpuid_phys    | Physical ID of boot CPU
+/// 0x20   | size_dt_strings    | Size of strings block in bytes
+/// 0x24   | size_dt_struct     | Size of structure block in bytes
+/// ```
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::{DeviceTreeParser, DtbHeader, DtbError};
+/// # fn example() -> Result<(), DtbError> {
+/// # let dtb_data = vec![0u8; 64]; // Mock data
+/// let parser = DeviceTreeParser::new(&dtb_data);
+/// let header = parser.parse_header()?;
+///
+/// // Validate magic number
+/// if header.magic == DtbHeader::MAGIC {
+///     println!("Valid DTB file");
+/// }
+///
+/// // Check version compatibility
+/// if header.version >= 17 {
+///     println!("Modern DTB format (v{})", header.version);
+/// }
+///
+/// // Examine file layout
+/// println!("DTB size: {} bytes", header.totalsize);
+/// println!("Structure block: {} bytes at offset 0x{:x}",
+///     header.size_dt_struct, header.off_dt_struct);
+/// println!("Strings block: {} bytes at offset 0x{:x}",
+///     header.size_dt_strings, header.off_dt_strings);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DtbHeader {
-    /// Magic number (should be 0xd00dfeed)
+    /// Magic number identifying this as a DTB file (must be 0xd00dfeed).
     pub magic: u32,
-    /// Total size of the DTB
+    /// Total size of the entire DTB file in bytes.
     pub totalsize: u32,
-    /// Offset to structure block
+    /// Byte offset from start of file to the structure block.
     pub off_dt_struct: u32,
-    /// Offset to strings block
+    /// Byte offset from start of file to the strings block.
     pub off_dt_strings: u32,
-    /// Offset to memory reservation block
+    /// Byte offset from start of file to the memory reservation block.
     pub off_mem_rsvmap: u32,
-    /// Version of the DTB format
+    /// DTB format version number (typically 17 for modern files).
     pub version: u32,
-    /// Last compatible version
+    /// Last DTB version that this file is compatible with.
     pub last_comp_version: u32,
-    /// Boot CPU ID
+    /// Physical CPU ID of the boot processor.
     pub boot_cpuid_phys: u32,
-    /// Size of strings block
+    /// Size of the strings block in bytes.
     pub size_dt_strings: u32,
-    /// Size of structure block
+    /// Size of the structure block in bytes.
     pub size_dt_struct: u32,
 }
 

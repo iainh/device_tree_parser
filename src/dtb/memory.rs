@@ -4,12 +4,54 @@
 use super::error::DtbError;
 use alloc::vec::Vec;
 
-/// Memory reservation entry with address and size
+/// Memory reservation entry specifying regions that must not be used by the OS.
+///
+/// Commonly used in embedded systems to protect regions used by firmware,
+/// bootloaders, or hardware that cannot be relocated. Each reservation specifies
+/// a physical address range.
+///
+/// # Format
+///
+/// Each reservation is 16 bytes:
+/// - 8 bytes: 64-bit physical address (big-endian)
+/// - 8 bytes: 64-bit size in bytes (big-endian)
+///
+/// The reservation list is terminated by an entry with both address
+/// and size set to zero.
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::{DeviceTreeParser, DtbError};
+/// # fn example() -> Result<(), DtbError> {
+/// # let dtb_data = vec![0u8; 64]; // Mock data
+/// let parser = DeviceTreeParser::new(&dtb_data);
+/// let reservations = parser.parse_memory_reservations()?;
+///
+/// for (i, reservation) in reservations.iter().enumerate() {
+///     println!("Reservation {}: 0x{:016x} - 0x{:016x}",
+///         i,
+///         reservation.address,
+///         reservation.address + reservation.size
+///     );
+///     
+///     // Check if this overlaps with our intended memory usage
+///     let our_start = 0x40000000u64;
+///     let our_end = 0x48000000u64;
+///     let res_end = reservation.address + reservation.size;
+///     
+///     if reservation.address < our_end && res_end > our_start {
+///         println!("  ⚠️  Overlaps with our memory region!");
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryReservation {
-    /// Physical address of reserved memory region
+    /// Physical address of the start of the reserved memory region.
     pub address: u64,
-    /// Size of reserved memory region
+    /// Size of the reserved memory region in bytes.
     pub size: u64,
 }
 
