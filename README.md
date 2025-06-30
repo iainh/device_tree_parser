@@ -17,7 +17,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-device_tree_parser = "0.1.0"
+device_tree_parser = "0.2.0"
 ```
 
 ## Usage
@@ -56,6 +56,24 @@ for node in parser.nodes() {
     }
 }
 ```
+
+## Documentation
+
+### 📚 Complete Documentation Suite
+
+- **[Device Tree Introduction](DEVICE_TREE_INTRO.md)** - New to device trees? Start here for a comprehensive introduction to concepts, terminology, and real-world examples.
+
+- **[Device Tree Specification Reference](DEVICE_TREE_SPECIFICATION.md)** - Detailed mapping of our implementation to the official Device Tree Specification, including compliance notes and specification references.
+
+- **[Migration Guide](MIGRATION.md)** - Upgrading from v0.1.x? Complete guide with before/after examples for the v0.2.0 zero-copy API changes.
+
+- **[Performance & Benchmarks](BENCHMARKS.md)** - Comprehensive benchmark documentation and performance analysis of the zero-copy implementation.
+
+### 🔗 External References
+
+- **[Device Tree Specification v0.4](https://github.com/devicetree-org/devicetree-specification)** - Official specification
+- **[Linux Kernel DT Documentation](https://www.kernel.org/doc/html/latest/devicetree/)** - Real-world usage examples
+- **[Device Tree Compiler (dtc)](https://git.kernel.org/pub/scm/utils/dtc/dtc.git)** - Reference tools
 
 ## Building
 
