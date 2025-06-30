@@ -3,6 +3,14 @@ name = "device_tree_parser"
 version = "0.3.0"
 edition = "2024"
 license = "MIT"
+description = "High-performance Device Tree Blob (DTB) parser with zero-copy parsing and ergonomic APIs for embedded systems"
+repository = "https://github.com/iainh/device_tree_parser"
+homepage = "https://github.com/iainh/device_tree_parser"
+documentation = "https://docs.rs/device_tree_parser"
+keywords = ["device-tree", "dtb", "embedded", "no-std", "hardware"]
+categories = ["embedded", "hardware-support", "parsing", "no-std"]
+authors = ["Iain H <iain@spiralpoint.org>"]
+readme = "README.md"
 
 [lib]
 name = "device_tree_parser"
