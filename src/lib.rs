@@ -8,23 +8,11 @@ extern crate alloc;
 use alloc::vec::Vec;
 use alloc::string::String;
 
+pub mod dtb;
 pub mod parser;
 
-/// Main library interface for device tree parsing
-pub struct DeviceTreeParser;
-
-impl DeviceTreeParser {
-    /// Create a new parser instance
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for DeviceTreeParser {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Re-export main types
+pub use dtb::{DeviceTreeParser, DtbError, DtbHeader};
 
 #[cfg(test)]
 mod tests {
@@ -32,13 +20,8 @@ mod tests {
 
     #[test]
     fn test_parser_creation() {
-        let parser = DeviceTreeParser::new();
-        // Basic instantiation test
-    }
-
-    #[test]
-    fn test_default_creation() {
-        let parser = DeviceTreeParser::default();
-        // Test default trait implementation
+        let data = &[0u8; 40];
+        let parser = DeviceTreeParser::new(data);
+        assert_eq!(parser.data().len(), 40);
     }
 }
