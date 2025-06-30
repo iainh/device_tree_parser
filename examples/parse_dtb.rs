@@ -18,13 +18,13 @@ fn main() {
 
     println!("🌳 Device Tree Parser Example");
     println!("==============================");
-    println!("Parsing DTB file: {}", dtb_path);
+    println!("Parsing DTB file: {dtb_path}");
     println!();
 
     match parse_dtb_file(dtb_path) {
         Ok(_) => println!("✅ DTB parsing completed successfully!"),
         Err(e) => {
-            eprintln!("❌ Error parsing DTB: {}", e);
+            eprintln!("❌ Error parsing DTB: {e}");
             process::exit(1);
         }
     }
@@ -32,8 +32,7 @@ fn main() {
 
 fn parse_dtb_file(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Load DTB file
-    let dtb_data =
-        fs::read(path).map_err(|e| format!("Failed to read DTB file '{}': {}", path, e))?;
+    let dtb_data = fs::read(path).map_err(|e| format!("Failed to read DTB file '{path}': {e}"))?;
 
     println!("📄 File size: {} bytes", dtb_data.len());
 
@@ -122,18 +121,18 @@ fn parse_device_tree(parser: &DeviceTreeParser) -> Result<(), DtbError> {
 
     // Show root properties
     if let Some(model) = tree.prop_string("model") {
-        println!("  Model: {}", model);
+        println!("  Model: {model}");
     }
     if let Some(compatible) = tree.prop_string("compatible") {
-        println!("  Compatible: {}", compatible);
+        println!("  Compatible: {compatible}");
     }
 
     // Count nodes and properties
     let node_count = tree.iter_nodes().count();
     let total_properties: usize = tree.iter_nodes().map(|node| node.properties.len()).sum();
 
-    println!("  Total nodes: {}", node_count);
-    println!("  Total properties: {}", total_properties);
+    println!("  Total nodes: {node_count}");
+    println!("  Total properties: {total_properties}");
     println!();
 
     // Show interesting nodes
@@ -153,10 +152,10 @@ fn show_cpu_information(tree: &device_tree_parser::DeviceTreeNode) {
 
         // Show CPU-level properties
         if let Some(address_cells) = cpus_node.prop_u32("#address-cells") {
-            println!("  Address cells: {}", address_cells);
+            println!("  Address cells: {address_cells}");
         }
         if let Some(size_cells) = cpus_node.prop_u32("#size-cells") {
-            println!("  Size cells: {}", size_cells);
+            println!("  Size cells: {size_cells}");
         }
 
         // Find individual CPUs
@@ -167,13 +166,13 @@ fn show_cpu_information(tree: &device_tree_parser::DeviceTreeNode) {
                 println!("  CPU {}: {}", cpu_count - 1, cpu.name);
 
                 if let Some(compatible) = cpu.prop_string("compatible") {
-                    println!("    Compatible: {}", compatible);
+                    println!("    Compatible: {compatible}");
                 }
                 if let Some(reg) = cpu.prop_u32("reg") {
-                    println!("    Register: {}", reg);
+                    println!("    Register: {reg}");
                 }
                 if let Some(freq) = cpu.prop_u32("timebase-frequency") {
-                    println!("    Timebase frequency: {} Hz", freq);
+                    println!("    Timebase frequency: {freq} Hz");
                 }
             }
         }
@@ -269,18 +268,18 @@ fn demonstrate_high_level_api(parser: &DeviceTreeParser) -> Result<(), DtbError>
             } else {
                 println!("📡 UART devices found:");
                 for (i, addr) in uart_addrs.iter().enumerate() {
-                    println!("  UART {}: 0x{:08x}", i, addr);
+                    println!("  UART {i}: 0x{addr:08x}");
                 }
             }
         }
-        Err(e) => println!("❌ Error finding UARTs: {}", e),
+        Err(e) => println!("❌ Error finding UARTs: {e}"),
     }
 
     // Timebase frequency
     match parser.timebase_frequency() {
-        Ok(Some(freq)) => println!("⏰ Timebase frequency: {} Hz", freq),
+        Ok(Some(freq)) => println!("⏰ Timebase frequency: {freq} Hz"),
         Ok(None) => println!("⏰ No timebase frequency found"),
-        Err(e) => println!("❌ Error getting timebase frequency: {}", e),
+        Err(e) => println!("❌ Error getting timebase frequency: {e}"),
     }
 
     // MMIO regions
@@ -304,7 +303,7 @@ fn demonstrate_high_level_api(parser: &DeviceTreeParser) -> Result<(), DtbError>
                 }
             }
         }
-        Err(e) => println!("❌ Error discovering MMIO regions: {}", e),
+        Err(e) => println!("❌ Error discovering MMIO regions: {e}"),
     }
 
     // Node and property search examples
@@ -348,7 +347,7 @@ fn demonstrate_high_level_api(parser: &DeviceTreeParser) -> Result<(), DtbError>
     if let Some(chosen) = tree.find_node("/chosen") {
         println!("✅ Found /chosen node: {}", chosen.name);
         if let Some(bootargs) = chosen.prop_string("bootargs") {
-            println!("  Boot arguments: {}", bootargs);
+            println!("  Boot arguments: {bootargs}");
         }
     } else {
         println!("❌ No /chosen node found");

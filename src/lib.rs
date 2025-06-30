@@ -25,6 +25,5 @@ mod tests {
         let data = &[0u8; 40];
         let parser = DeviceTreeParser::new(data);
         assert_eq!(parser.data().len(), 40);
-        // Test comment to verify pre-commit hook
     }
 }

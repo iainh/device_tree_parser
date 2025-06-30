@@ -255,7 +255,7 @@ impl<'a> Index<&str> for DeviceTreeNode<'a> {
 
     fn index(&self, property_name: &str) -> &Self::Output {
         self.find_property(property_name)
-            .unwrap_or_else(|| panic!("Property '{}' not found", property_name))
+            .unwrap_or_else(|| panic!("Property '{property_name}' not found"))
     }
 }
 
@@ -283,18 +283,18 @@ impl<'a> Display for PropertyValue<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             PropertyValue::Empty => write!(f, "<empty>"),
-            PropertyValue::String(s) => write!(f, "\"{}\"", s),
+            PropertyValue::String(s) => write!(f, "\"{s}\""),
             PropertyValue::StringList(list) => {
                 write!(f, "[")?;
                 for (i, s) in list.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "\"{}\"", s)?;
+                    write!(f, "\"{s}\"")?;
                 }
                 write!(f, "]")
             }
-            PropertyValue::U32(val) => write!(f, "0x{:x}", val),
+            PropertyValue::U32(val) => write!(f, "0x{val:x}"),
             PropertyValue::U32Array(bytes) => {
                 write!(f, "[")?;
                 for (i, chunk) in bytes.chunks_exact(4).enumerate() {
@@ -302,11 +302,11 @@ impl<'a> Display for PropertyValue<'a> {
                         write!(f, ", ")?;
                     }
                     let val = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                    write!(f, "0x{:x}", val)?;
+                    write!(f, "0x{val:x}")?;
                 }
                 write!(f, "]")
             }
-            PropertyValue::U64(val) => write!(f, "0x{:x}", val),
+            PropertyValue::U64(val) => write!(f, "0x{val:x}"),
             PropertyValue::U64Array(bytes) => {
                 write!(f, "[")?;
                 for (i, chunk) in bytes.chunks_exact(8).enumerate() {
@@ -317,7 +317,7 @@ impl<'a> Display for PropertyValue<'a> {
                         chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6],
                         chunk[7],
                     ]);
-                    write!(f, "0x{:x}", val)?;
+                    write!(f, "0x{val:x}")?;
                 }
                 write!(f, "]")
             }
@@ -327,7 +327,7 @@ impl<'a> Display for PropertyValue<'a> {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "0x{:02x}", byte)?;
+                    write!(f, "0x{byte:02x}")?;
                 }
                 write!(f, "]")
             }
@@ -354,20 +354,20 @@ impl<'a> DeviceTreeNode<'a> {
         let indent_str = "  ".repeat(indent);
 
         if self.name.is_empty() {
-            writeln!(f, "{}/ {{", indent_str)?;
+            writeln!(f, "{indent_str}/ {{")?;
         } else {
-            writeln!(f, "{}{} {{", indent_str, self.name)?;
+            writeln!(f, "{indent_str}{} {{", self.name)?;
         }
 
         for property in &self.properties {
-            writeln!(f, "{}  {}", indent_str, property)?;
+            writeln!(f, "{indent_str}  {property}")?;
         }
 
         for child in &self.children {
             child.fmt_with_indent(f, indent + 1)?;
         }
 
-        writeln!(f, "{}}}", indent_str)
+        writeln!(f, "{indent_str}}}")
     }
 }
 

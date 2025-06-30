@@ -164,12 +164,25 @@ See [BENCHMARKS.md](BENCHMARKS.md) for detailed information on benchmark categor
 
 ## Code Quality
 
+### Pre-commit Hook
+
+A pre-commit hook is automatically set up to ensure code quality. It runs:
+- `cargo fmt --check` to verify code formatting
+- `cargo clippy` to catch common issues and enforce best practices
+
+The hook automatically runs when you commit and will prevent commits if checks fail.
+
+### Manual Code Quality Checks
+
 ```bash
 # Format code
 cargo fmt
 
 # Run lints (if clippy is available)
-cargo clippy
+cargo clippy --all-targets --all-features
+
+# Check formatting without modifying files
+cargo fmt --check
 ```
 
 ## Architecture
