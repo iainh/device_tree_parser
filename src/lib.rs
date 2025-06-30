@@ -59,9 +59,12 @@ mod integration_tests;
 
 // Re-export main types
 pub use dtb::{
-    AddressSpec, DeviceTreeNode, DeviceTreeParser, DtbError, DtbHeader, DtbToken,
+    AddressRange, AddressSpec, DeviceTreeNode, DeviceTreeParser, DtbError, DtbHeader, DtbToken,
     MemoryReservation, NodeIterator, Property, PropertyValue,
 };
+
+// Re-export utility functions
+pub use dtb::tree::parse_address_from_bytes;
 
 #[cfg(test)]
 mod tests {

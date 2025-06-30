@@ -233,6 +233,167 @@ impl Default for AddressSpec {
     }
 }
 
+/// Address range entry from a device tree `ranges` property.
+///
+/// The `ranges` property provides mappings between address spaces of parent and child
+/// bus domains. Each range specifies how to translate addresses from the child address
+/// space to the parent address space.
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::{AddressRange, DtbError};
+/// let range = AddressRange::new(0x0, 0x80000000, 0x10000000)?;
+///
+/// // Check if an address is in this range
+/// assert!(range.contains(0x8000));
+/// assert!(!range.contains(0x20000000));
+///
+/// // Translate a child address to parent address
+/// let parent_addr = range.translate(0x8000)?;
+/// assert_eq!(parent_addr, 0x80008000);
+/// # Ok::<(), DtbError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AddressRange {
+    /// Child address (in child's address space).
+    child_address: u64,
+    /// Parent address (in parent's address space).
+    parent_address: u64,
+    /// Size of the range in bytes.
+    size: u64,
+}
+
+impl AddressRange {
+    /// Creates a new address range with validation.
+    ///
+    /// # Arguments
+    ///
+    /// * `child_address` - Starting address in child's address space
+    /// * `parent_address` - Starting address in parent's address space  
+    /// * `size` - Size of the range in bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::AddressTranslationError` if the range would cause
+    /// address arithmetic overflow.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{AddressRange, DtbError};
+    /// // Map child addresses 0x0-0xFFFFFF to parent 0x80000000-0x80FFFFFF
+    /// let range = AddressRange::new(0x0, 0x80000000, 0x1000000)?;
+    /// assert_eq!(range.child_address(), 0x0);
+    /// assert_eq!(range.parent_address(), 0x80000000);
+    /// assert_eq!(range.size(), 0x1000000);
+    /// # Ok::<(), DtbError>(())
+    /// ```
+    pub fn new(child_address: u64, parent_address: u64, size: u64) -> Result<Self, DtbError> {
+        // Validate that the range doesn't overflow
+        if child_address.checked_add(size).is_none() {
+            return Err(DtbError::AddressTranslationError(child_address));
+        }
+        if parent_address.checked_add(size).is_none() {
+            return Err(DtbError::AddressTranslationError(parent_address));
+        }
+
+        Ok(Self {
+            child_address,
+            parent_address,
+            size,
+        })
+    }
+
+    /// Returns the child address (start of range in child address space).
+    #[must_use]
+    pub const fn child_address(&self) -> u64 {
+        self.child_address
+    }
+
+    /// Returns the parent address (start of range in parent address space).
+    #[must_use]
+    pub const fn parent_address(&self) -> u64 {
+        self.parent_address
+    }
+
+    /// Returns the size of the range in bytes.
+    #[must_use]
+    pub const fn size(&self) -> u64 {
+        self.size
+    }
+
+    /// Returns the end address in child address space (exclusive).
+    #[must_use]
+    pub const fn child_end(&self) -> u64 {
+        self.child_address + self.size
+    }
+
+    /// Returns the end address in parent address space (exclusive).
+    #[must_use]
+    pub const fn parent_end(&self) -> u64 {
+        self.parent_address + self.size
+    }
+
+    /// Checks if a child address falls within this range.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - Address in child's address space to check
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{AddressRange, DtbError};
+    /// let range = AddressRange::new(0x1000, 0x80001000, 0x1000)?;
+    ///
+    /// assert!(range.contains(0x1000));   // Start of range
+    /// assert!(range.contains(0x1500));   // Middle of range
+    /// assert!(!range.contains(0x2000));  // End of range (exclusive)
+    /// assert!(!range.contains(0x500));   // Before range
+    /// # Ok::<(), DtbError>(())
+    /// ```
+    #[must_use]
+    pub const fn contains(&self, address: u64) -> bool {
+        address >= self.child_address && address < self.child_end()
+    }
+
+    /// Translates a child address to the corresponding parent address.
+    ///
+    /// # Arguments
+    ///
+    /// * `child_addr` - Address in child's address space
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::AddressTranslationError` if the address is not
+    /// within this range or if translation would cause overflow.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{AddressRange, DtbError};
+    /// let range = AddressRange::new(0x0, 0x80000000, 0x10000)?;
+    ///
+    /// assert_eq!(range.translate(0x0)?, 0x80000000);     // Start
+    /// assert_eq!(range.translate(0x8000)?, 0x80008000);  // Middle
+    ///
+    /// // Address outside range should fail
+    /// assert!(range.translate(0x20000).is_err());
+    /// # Ok::<(), DtbError>(())
+    /// ```
+    pub fn translate(&self, child_addr: u64) -> Result<u64, DtbError> {
+        if !self.contains(child_addr) {
+            return Err(DtbError::AddressTranslationError(child_addr));
+        }
+
+        let offset = child_addr - self.child_address;
+        self.parent_address
+            .checked_add(offset)
+            .ok_or(DtbError::AddressTranslationError(child_addr))
+    }
+}
+
 /// Device tree node representing a hardware component or logical grouping.
 ///
 /// Device tree nodes form a hierarchical structure describing system hardware.
@@ -665,6 +826,114 @@ impl<'a> DeviceTreeNode<'a> {
         AddressSpec::new(address_cells, size_cells)
     }
 
+    /// Parse the `ranges` property to extract address range mappings.
+    ///
+    /// The `ranges` property describes the mapping between child and parent address
+    /// spaces. Each entry contains child address, parent address, and size fields.
+    /// The number of cells for each field is determined by the node's cell properties.
+    ///
+    /// An empty `ranges` property indicates a 1:1 mapping between child and parent
+    /// address spaces.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - Optional parent node for cell inheritance
+    /// * `child_address_cells` - Number of cells for child addresses (from this node)
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidRangesFormat` if the ranges data is malformed.
+    /// Returns cell validation errors if address/size cell values are invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(node: &DeviceTreeNode, parent: Option<&DeviceTreeNode>) -> Result<(), DtbError> {
+    /// let ranges = node.ranges(parent, 2)?;
+    ///
+    /// for range in &ranges {
+    ///     println!("Range: child=0x{:x} -> parent=0x{:x}, size=0x{:x}",
+    ///         range.child_address(), range.parent_address(), range.size());
+    /// }
+    ///
+    /// // Check if empty (1:1 mapping)
+    /// if ranges.is_empty() {
+    ///     println!("1:1 address mapping");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn ranges(
+        &self,
+        parent: Option<&DeviceTreeNode<'a>>,
+        child_address_cells: u32,
+    ) -> Result<Vec<AddressRange>, DtbError> {
+        // Get the raw ranges property data
+        let ranges_data = match self.find_property("ranges") {
+            Some(prop) => match &prop.value {
+                PropertyValue::Bytes(data) => *data,
+                PropertyValue::U32Array(data) => *data,
+                PropertyValue::Empty => {
+                    // Empty ranges property means 1:1 mapping
+                    return Ok(Vec::new());
+                }
+                _ => return Err(DtbError::InvalidRangesFormat),
+            },
+            None => {
+                // No ranges property means this node doesn't provide address translation
+                return Ok(Vec::new());
+            }
+        };
+
+        // Get address and size cells for parent (for parent address field)
+        let parent_address_cells = self.address_cells_with_parent(parent)?;
+        let parent_size_cells = self.size_cells_with_parent(parent)?;
+
+        // Calculate the size of each range entry in bytes
+        let child_addr_bytes = (child_address_cells * 4) as usize;
+        let parent_addr_bytes = (parent_address_cells * 4) as usize;
+        let size_bytes = (parent_size_cells * 4) as usize;
+        let entry_size = child_addr_bytes + parent_addr_bytes + size_bytes;
+
+        // Validate that the data size is a multiple of entry size
+        if ranges_data.len() % entry_size != 0 {
+            return Err(DtbError::InvalidRangesFormat);
+        }
+
+        let mut ranges = Vec::new();
+        let mut offset = 0;
+
+        while offset + entry_size <= ranges_data.len() {
+            // Parse child address
+            let child_address = parse_address_from_bytes(
+                &ranges_data[offset..offset + child_addr_bytes],
+                child_address_cells,
+            )?;
+            offset += child_addr_bytes;
+
+            // Parse parent address
+            let parent_address = parse_address_from_bytes(
+                &ranges_data[offset..offset + parent_addr_bytes],
+                parent_address_cells,
+            )?;
+            offset += parent_addr_bytes;
+
+            // Parse size
+            let size = parse_address_from_bytes(
+                &ranges_data[offset..offset + size_bytes],
+                parent_size_cells,
+            )?;
+            offset += size_bytes;
+
+            // Create and validate the address range
+            let range = AddressRange::new(child_address, parent_address, size)?;
+            ranges.push(range);
+        }
+
+        Ok(ranges)
+    }
+
     /// Get all nodes with a specific property
     #[must_use]
     pub fn find_nodes_with_property(&self, property_name: &str) -> Vec<&DeviceTreeNode<'a>> {
@@ -983,6 +1252,69 @@ impl<'a, 'b> Iterator for NodeIterator<'a, 'b> {
         } else {
             None
         }
+    }
+}
+
+/// Parse a multi-cell address value from big-endian bytes.
+///
+/// Device tree addresses can be 1-4 cells (4-16 bytes). This function
+/// handles variable cell sizes and converts to a 64-bit address value.
+///
+/// # Arguments
+///
+/// * `bytes` - Raw bytes containing the address (must be 4*cells bytes)
+/// * `cells` - Number of 32-bit cells (1-4)
+///
+/// # Errors
+///
+/// Returns `DtbError::InvalidAddressCells` if cells is not in range 1-4.
+/// Returns `DtbError::MalformedHeader` if bytes length doesn't match cells.
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::DtbError;
+/// # fn example() -> Result<(), DtbError> {
+/// # use device_tree_parser::parse_address_from_bytes;
+/// // Parse 2-cell address (8 bytes)
+/// let bytes = [0x00, 0x00, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00];
+/// let addr = parse_address_from_bytes(&bytes, 2)?;
+/// assert_eq!(addr, 0x1080000000);
+/// # Ok(())
+/// # }
+/// ```
+pub fn parse_address_from_bytes(bytes: &[u8], cells: u32) -> Result<u64, DtbError> {
+    let expected_len = (cells * 4) as usize;
+    if bytes.len() != expected_len {
+        return Err(DtbError::MalformedHeader);
+    }
+
+    match cells {
+        1 => {
+            // 1 cell = 32-bit address
+            let addr = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            Ok(u64::from(addr))
+        }
+        2 => {
+            // 2 cells = 64-bit address
+            Ok(u64::from_be_bytes([
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            ]))
+        }
+        3 => {
+            // 3 cells = 96-bit address (use lower 64 bits)
+            Ok(u64::from_be_bytes([
+                bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+            ]))
+        }
+        4 => {
+            // 4 cells = 128-bit address (use lower 64 bits)
+            Ok(u64::from_be_bytes([
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15],
+            ]))
+        }
+        _ => Err(DtbError::InvalidAddressCells(cells)),
     }
 }
 
@@ -1681,5 +2013,255 @@ mod tests {
             AddressSpec::DEFAULT_ADDRESS_CELLS
         );
         assert_eq!(default_spec.size_cells(), AddressSpec::DEFAULT_SIZE_CELLS);
+    }
+
+    #[test]
+    fn test_address_range_creation() {
+        // Test valid range creation
+        let range = AddressRange::new(0x1000, 0x80001000, 0x1000).unwrap();
+        assert_eq!(range.child_address(), 0x1000);
+        assert_eq!(range.parent_address(), 0x80001000);
+        assert_eq!(range.size(), 0x1000);
+        assert_eq!(range.child_end(), 0x2000);
+        assert_eq!(range.parent_end(), 0x80002000);
+
+        // Test overflow detection in child address
+        assert!(matches!(
+            AddressRange::new(u64::MAX, 0x80000000, 1),
+            Err(DtbError::AddressTranslationError(_))
+        ));
+
+        // Test overflow detection in parent address
+        assert!(matches!(
+            AddressRange::new(0x1000, u64::MAX, 1),
+            Err(DtbError::AddressTranslationError(_))
+        ));
+    }
+
+    #[test]
+    fn test_address_range_contains() {
+        let range = AddressRange::new(0x1000, 0x80001000, 0x1000).unwrap();
+
+        // Test addresses within range
+        assert!(range.contains(0x1000)); // Start
+        assert!(range.contains(0x1500)); // Middle
+        assert!(range.contains(0x1FFF)); // Just before end
+
+        // Test addresses outside range
+        assert!(!range.contains(0x2000)); // End (exclusive)
+        assert!(!range.contains(0x500)); // Before start
+        assert!(!range.contains(0x3000)); // After end
+    }
+
+    #[test]
+    fn test_address_range_translation() {
+        let range = AddressRange::new(0x1000, 0x80001000, 0x1000).unwrap();
+
+        // Test valid translations
+        assert_eq!(range.translate(0x1000).unwrap(), 0x80001000); // Start
+        assert_eq!(range.translate(0x1500).unwrap(), 0x80001500); // Middle
+        assert_eq!(range.translate(0x1FFF).unwrap(), 0x80001FFF); // Just before end
+
+        // Test invalid translations (outside range)
+        assert!(matches!(
+            range.translate(0x500),
+            Err(DtbError::AddressTranslationError(0x500))
+        ));
+        assert!(matches!(
+            range.translate(0x2000),
+            Err(DtbError::AddressTranslationError(0x2000))
+        ));
+
+        // Test edge case with maximum values
+        let max_range = AddressRange::new(0x0, u64::MAX - 10, 10).unwrap();
+        assert_eq!(max_range.translate(0x5).unwrap(), u64::MAX - 5);
+    }
+
+    #[test]
+    fn test_parse_address_from_bytes() {
+        // Test 1-cell address (32-bit)
+        let bytes1 = [0x12, 0x34, 0x56, 0x78];
+        let addr1 = parse_address_from_bytes(&bytes1, 1).unwrap();
+        assert_eq!(addr1, 0x12345678);
+
+        // Test 2-cell address (64-bit)
+        let bytes2 = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+        let addr2 = parse_address_from_bytes(&bytes2, 2).unwrap();
+        assert_eq!(addr2, 0x123456789ABCDEF0);
+
+        // Test 3-cell address (uses lower 64 bits - second and third cells)
+        let bytes3 = [
+            0x00, 0x11, 0x22, 0x33, // First cell (ignored)
+            0x44, 0x55, 0x66, 0x77, // Second cell
+            0x88, 0x99, 0xAA, 0xBB, // Third cell
+        ];
+        let addr3 = parse_address_from_bytes(&bytes3, 3).unwrap();
+        assert_eq!(addr3, 0x445566778899AABB);
+
+        // Test 4-cell address (uses lower 64 bits)
+        let bytes4 = [
+            0x00, 0x11, 0x22, 0x33, // First cell (ignored)
+            0x44, 0x55, 0x66, 0x77, // Second cell (ignored)
+            0x88, 0x99, 0xAA, 0xBB, // Third cell
+            0xCC, 0xDD, 0xEE, 0xFF, // Fourth cell
+        ];
+        let addr4 = parse_address_from_bytes(&bytes4, 4).unwrap();
+        assert_eq!(addr4, 0x8899AABBCCDDEEFF);
+
+        // Test invalid cell count - 0 cells should fail on length check
+        assert!(matches!(
+            parse_address_from_bytes(&bytes1, 0),
+            Err(DtbError::MalformedHeader)
+        ));
+        // 5 cells with correct length should fail on the match
+        let bytes5 = [0u8; 20]; // 5 cells * 4 bytes
+        assert!(matches!(
+            parse_address_from_bytes(&bytes5, 5),
+            Err(DtbError::InvalidAddressCells(5))
+        ));
+
+        // Test invalid byte length
+        assert!(matches!(
+            parse_address_from_bytes(&bytes1[..3], 1),
+            Err(DtbError::MalformedHeader)
+        ));
+    }
+
+    #[test]
+    fn test_ranges_parsing_empty_property() {
+        // Test node with empty ranges property (1:1 mapping)
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Empty,
+        });
+
+        let ranges = node.ranges(None, 2).unwrap();
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn test_ranges_parsing_no_property() {
+        // Test node without ranges property
+        let node = DeviceTreeNode::new("test");
+        let ranges = node.ranges(None, 2).unwrap();
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn test_ranges_parsing_with_data() {
+        // Create a node with 2 address cells, 1 size cell
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create ranges data: child_addr(2 cells) + parent_addr(2 cells) + size(1 cell)
+        // Range 1: child=0x0, parent=0x80000000, size=0x10000
+        // Range 2: child=0x20000, parent=0x90000000, size=0x8000
+        let ranges_data = vec![
+            // Range 1: child address (0x0 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // Range 1: parent address (0x80000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+            // Range 1: size (0x10000 as 1 cell)
+            0x00, 0x01, 0x00, 0x00, // Range 2: child address (0x20000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+            // Range 2: parent address (0x90000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00,
+            // Range 2: size (0x8000 as 1 cell)
+            0x00, 0x00, 0x80, 0x00,
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        let ranges = node.ranges(None, 2).unwrap();
+        assert_eq!(ranges.len(), 2);
+
+        // Check first range
+        let range1 = &ranges[0];
+        assert_eq!(range1.child_address(), 0x0);
+        assert_eq!(range1.parent_address(), 0x80000000);
+        assert_eq!(range1.size(), 0x10000);
+
+        // Check second range
+        let range2 = &ranges[1];
+        assert_eq!(range2.child_address(), 0x20000);
+        assert_eq!(range2.parent_address(), 0x90000000);
+        assert_eq!(range2.size(), 0x8000);
+    }
+
+    #[test]
+    fn test_ranges_parsing_invalid_format() {
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Invalid ranges data (not multiple of entry size)
+        // Entry size should be 2+2+1 = 5 cells = 20 bytes
+        let invalid_data = vec![0u8; 19]; // 19 bytes is not divisible by 20
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&invalid_data),
+        });
+
+        assert!(matches!(
+            node.ranges(None, 2),
+            Err(DtbError::InvalidRangesFormat)
+        ));
+    }
+
+    #[test]
+    fn test_ranges_parsing_with_inheritance() {
+        // Create parent node with different address/size cells
+        let mut parent = DeviceTreeNode::new("parent");
+        parent.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(1),
+        });
+        parent.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create child node without cell properties (inherits from parent)
+        let mut child = DeviceTreeNode::new("child");
+
+        // Create ranges data: child_addr(2 cells) + parent_addr(1 cell) + size(1 cell)
+        // Range: child=0x1000, parent=0x80000000, size=0x1000
+        let ranges_data = vec![
+            // Child address (0x1000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+            // Parent address (0x80000000 as 1 cell)
+            0x80, 0x00, 0x00, 0x00, // Size (0x1000 as 1 cell)
+            0x00, 0x00, 0x10, 0x00,
+        ];
+
+        child.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        let ranges = child.ranges(Some(&parent), 2).unwrap();
+        assert_eq!(ranges.len(), 1);
+
+        let range = &ranges[0];
+        assert_eq!(range.child_address(), 0x1000);
+        assert_eq!(range.parent_address(), 0x80000000);
+        assert_eq!(range.size(), 0x1000);
     }
 }

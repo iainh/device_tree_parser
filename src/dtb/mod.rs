@@ -13,4 +13,4 @@ pub use header::DtbHeader;
 pub use memory::MemoryReservation;
 pub use parser::DeviceTreeParser;
 pub use tokens::DtbToken;
-pub use tree::{AddressSpec, DeviceTreeNode, NodeIterator, Property, PropertyValue};
+pub use tree::{AddressRange, AddressSpec, DeviceTreeNode, NodeIterator, Property, PropertyValue};
