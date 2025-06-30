@@ -40,7 +40,7 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Parse the complete device tree structure
-    pub fn parse_tree(&self) -> Result<DeviceTreeNode, DtbError> {
+    pub fn parse_tree(&self) -> Result<DeviceTreeNode<'a>, DtbError> {
         let header = self.parse_header()?;
 
         let struct_block_start = header.off_dt_struct as usize;
@@ -57,7 +57,7 @@ impl<'a> DeviceTreeParser<'a> {
         let struct_block = &self.data[struct_block_start..struct_block_end];
         let strings_block = &self.data[strings_block_start..];
 
-        self.parse_structure_block(struct_block, strings_block)
+        Self::parse_structure_block(struct_block, strings_block)
     }
 
     /// Find UART device addresses
@@ -81,7 +81,7 @@ impl<'a> DeviceTreeParser<'a> {
                     && reg.len() >= 2
                 {
                     // First cell is typically the address
-                    addresses.push(reg[0] as u64);
+                    addresses.push(u64::from(reg[0]));
                 }
             }
         }
@@ -121,8 +121,8 @@ impl<'a> DeviceTreeParser<'a> {
                 // Parse reg property as address/size pairs
                 let mut i = 0;
                 while i + 1 < reg.len() {
-                    let address = reg[i] as u64;
-                    let size = reg[i + 1] as u64;
+                    let address = u64::from(reg[i]);
+                    let size = u64::from(reg[i + 1]);
                     regions.push((address, size));
                     i += 2;
                 }
@@ -133,24 +133,26 @@ impl<'a> DeviceTreeParser<'a> {
     }
 
     /// Find node by path
-    pub fn find_node(&self, path: &str) -> Result<Option<DeviceTreeNode>, DtbError> {
+    pub fn find_node(&self, path: &str) -> Result<Option<DeviceTreeNode<'a>>, DtbError> {
         let root = self.parse_tree()?;
         Ok(root.find_node(path).cloned())
     }
 
     /// Find all nodes with a specific compatible string
-    pub fn find_compatible_nodes(&self, compatible: &str) -> Result<Vec<DeviceTreeNode>, DtbError> {
+    pub fn find_compatible_nodes(
+        &self,
+        compatible: &str,
+    ) -> Result<Vec<DeviceTreeNode<'a>>, DtbError> {
         let root = self.parse_tree()?;
         let nodes = root.find_compatible_nodes(compatible);
         Ok(nodes.into_iter().cloned().collect())
     }
 
     /// Parse the structure block to build the device tree
-    fn parse_structure_block<'b>(
-        &self,
-        struct_block: &'b [u8],
-        strings_block: &'b [u8],
-    ) -> Result<DeviceTreeNode, DtbError> {
+    fn parse_structure_block(
+        struct_block: &'a [u8],
+        strings_block: &'a [u8],
+    ) -> Result<DeviceTreeNode<'a>, DtbError> {
         parse_device_tree_iterative(struct_block, strings_block)
     }
 }
@@ -159,11 +161,11 @@ impl<'a> DeviceTreeParser<'a> {
 fn parse_device_tree_iterative<'a>(
     mut input: &'a [u8],
     strings_block: &'a [u8],
-) -> Result<DeviceTreeNode, DtbError> {
+) -> Result<DeviceTreeNode<'a>, DtbError> {
     use alloc::vec::Vec;
 
     // Stack to keep track of node hierarchy
-    let mut node_stack: Vec<DeviceTreeNode> = Vec::new();
+    let mut node_stack: Vec<DeviceTreeNode<'a>> = Vec::new();
 
     loop {
         let (remaining, token) = DtbToken::parse(input)?;
@@ -197,11 +199,10 @@ fn parse_device_tree_iterative<'a>(
                     if node_stack.is_empty() {
                         // This is the root node, we're done
                         return Ok(completed_node);
-                    } else {
-                        // Add as child to the parent node
-                        if let Some(parent_node) = node_stack.last_mut() {
-                            parent_node.add_child(completed_node);
-                        }
+                    }
+                    // Add as child to the parent node
+                    if let Some(parent_node) = node_stack.last_mut() {
+                        parent_node.add_child(completed_node);
                     }
                 } else {
                     return Err(DtbError::InvalidToken);

@@ -18,15 +18,15 @@ pub enum DtbToken {
 
 impl DtbToken {
     /// Begin node token constant
-    pub const FDT_BEGIN_NODE: u32 = 0x00000001;
+    pub const FDT_BEGIN_NODE: u32 = 0x0000_0001;
     /// End node token constant
-    pub const FDT_END_NODE: u32 = 0x00000002;
+    pub const FDT_END_NODE: u32 = 0x0000_0002;
     /// Property token constant
-    pub const FDT_PROP: u32 = 0x00000003;
+    pub const FDT_PROP: u32 = 0x0000_0003;
     /// End of structure token constant
-    pub const FDT_END: u32 = 0x00000009;
+    pub const FDT_END: u32 = 0x0000_0009;
 
-    /// Convert u32 value to DtbToken
+    /// Convert u32 value to `DtbToken`
     pub fn from_u32(value: u32) -> Result<Self, DtbError> {
         match value {
             Self::FDT_BEGIN_NODE => Ok(DtbToken::BeginNode),
@@ -37,7 +37,7 @@ impl DtbToken {
         }
     }
 
-    /// Convert DtbToken to u32 value
+    /// Convert `DtbToken` to u32 value
     pub fn to_u32(self) -> u32 {
         match self {
             DtbToken::BeginNode => Self::FDT_BEGIN_NODE,

@@ -30,7 +30,7 @@ pub struct DtbHeader {
 
 impl DtbHeader {
     /// DTB magic number constant
-    pub const MAGIC: u32 = 0xd00dfeed;
+    pub const MAGIC: u32 = 0xd00d_feed;
 
     /// Header size in bytes
     pub const SIZE: usize = 40;

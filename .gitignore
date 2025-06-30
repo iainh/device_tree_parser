@@ -3,5 +3,9 @@
 # Development files
 *.md
 !README.md
+!CHANGELOG.md
+!MIGRATION.md
+!BENCHMARKS.md
+!PERFORMANCE_IMPROVEMENTS.md
 .envrc
 .direnv/

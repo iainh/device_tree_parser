@@ -122,6 +122,28 @@ cargo test -- --nocapture
 Test data is located in `test-data/` and includes:
 - `virt.dtb`: QEMU virtual machine device tree for testing
 
+## Benchmarks
+
+The library includes comprehensive benchmarks to measure parsing performance:
+
+```bash
+# Run all benchmarks
+cargo bench
+
+# Quick benchmarks (faster, less accurate)
+./bench.sh quick
+
+# Specific benchmark categories
+./bench.sh parsing    # Core parsing performance
+./bench.sh properties # Property access performance
+./bench.sh api        # High-level API performance
+
+# View HTML reports
+./bench.sh report
+```
+
+See [BENCHMARKS.md](BENCHMARKS.md) for detailed information on benchmark categories and interpretation.
+
 ## Code Quality
 
 ```bash

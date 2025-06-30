@@ -3,56 +3,52 @@
 
 use super::error::DtbError;
 use super::tokens::DtbToken;
-use alloc::{
-    string::{String, ToString},
-    vec,
-    vec::Vec,
-};
+use alloc::{vec, vec::Vec};
 
 /// Property value types in device tree
 #[derive(Debug, Clone, PartialEq)]
-pub enum PropertyValue {
+pub enum PropertyValue<'a> {
     /// Empty property
     Empty,
     /// String value
-    String(String),
+    String(&'a str),
     /// Multiple string values
-    StringList(Vec<String>),
+    StringList(Vec<&'a str>),
     /// 32-bit unsigned integer
     U32(u32),
-    /// Array of 32-bit unsigned integers
-    U32Array(Vec<u32>),
+    /// Array of 32-bit unsigned integers (stored as raw bytes)
+    U32Array(&'a [u8]),
     /// 64-bit unsigned integer
     U64(u64),
-    /// Array of 64-bit unsigned integers
-    U64Array(Vec<u64>),
+    /// Array of 64-bit unsigned integers (stored as raw bytes)
+    U64Array(&'a [u8]),
     /// Raw byte array
-    Bytes(Vec<u8>),
+    Bytes(&'a [u8]),
 }
 
 /// Device tree property
 #[derive(Debug, Clone)]
-pub struct Property {
+pub struct Property<'a> {
     /// Property name
-    pub name: String,
+    pub name: &'a str,
     /// Property value
-    pub value: PropertyValue,
+    pub value: PropertyValue<'a>,
 }
 
 /// Device tree node
 #[derive(Debug, Clone)]
-pub struct DeviceTreeNode {
+pub struct DeviceTreeNode<'a> {
     /// Node name
-    pub name: String,
+    pub name: &'a str,
     /// Node properties
-    pub properties: Vec<Property>,
+    pub properties: Vec<Property<'a>>,
     /// Child nodes
-    pub children: Vec<DeviceTreeNode>,
+    pub children: Vec<DeviceTreeNode<'a>>,
 }
 
-impl DeviceTreeNode {
+impl<'a> DeviceTreeNode<'a> {
     /// Create a new device tree node
-    pub fn new(name: String) -> Self {
+    pub fn new(name: &'a str) -> Self {
         Self {
             name,
             properties: Vec::new(),
@@ -61,27 +57,27 @@ impl DeviceTreeNode {
     }
 
     /// Add a property to the node
-    pub fn add_property(&mut self, property: Property) {
+    pub fn add_property(&mut self, property: Property<'a>) {
         self.properties.push(property);
     }
 
     /// Add a child node
-    pub fn add_child(&mut self, child: DeviceTreeNode) {
+    pub fn add_child(&mut self, child: DeviceTreeNode<'a>) {
         self.children.push(child);
     }
 
     /// Find a property by name
-    pub fn find_property(&self, name: &str) -> Option<&Property> {
+    pub fn find_property(&self, name: &str) -> Option<&Property<'a>> {
         self.properties.iter().find(|p| p.name == name)
     }
 
     /// Find a child node by name
-    pub fn find_child(&self, name: &str) -> Option<&DeviceTreeNode> {
+    pub fn find_child(&self, name: &str) -> Option<&DeviceTreeNode<'a>> {
         self.children.iter().find(|c| c.name == name)
     }
 
     /// Find a node by path (e.g., "/cpus/cpu@0")
-    pub fn find_node(&self, path: &str) -> Option<&DeviceTreeNode> {
+    pub fn find_node(&self, path: &str) -> Option<&DeviceTreeNode<'a>> {
         if path.is_empty() || path == "/" {
             return Some(self);
         }
@@ -93,7 +89,7 @@ impl DeviceTreeNode {
     }
 
     /// Find a node by path parts
-    fn find_node_by_parts(&self, parts: &[&str]) -> Option<&DeviceTreeNode> {
+    fn find_node_by_parts(&self, parts: &[&str]) -> Option<&DeviceTreeNode<'a>> {
         if parts.is_empty() {
             return Some(self);
         }
@@ -125,7 +121,9 @@ impl DeviceTreeNode {
     pub fn prop_u32(&self, name: &str) -> Option<u32> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::U32(val) => Some(*val),
-            PropertyValue::U32Array(arr) if !arr.is_empty() => Some(arr[0]),
+            PropertyValue::U32Array(bytes) if bytes.len() >= 4 => {
+                Some(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+            }
             _ => None,
         })
     }
@@ -133,17 +131,23 @@ impl DeviceTreeNode {
     /// Get property value as string
     pub fn prop_string(&self, name: &str) -> Option<&str> {
         self.find_property(name).and_then(|p| match &p.value {
-            PropertyValue::String(s) => Some(s.as_str()),
-            PropertyValue::StringList(list) if !list.is_empty() => Some(list[0].as_str()),
+            PropertyValue::String(s) => Some(*s),
+            PropertyValue::StringList(list) if !list.is_empty() => Some(list[0]),
             _ => None,
         })
     }
 
     /// Get property value as u32 array
-    pub fn prop_u32_array(&self, name: &str) -> Option<&[u32]> {
+    pub fn prop_u32_array(&self, name: &str) -> Option<Vec<u32>> {
         self.find_property(name).and_then(|p| match &p.value {
-            PropertyValue::U32Array(arr) => Some(arr.as_slice()),
-            PropertyValue::U32(val) => Some(core::slice::from_ref(val)),
+            PropertyValue::U32Array(bytes) => {
+                let mut values = Vec::new();
+                for chunk in bytes.chunks_exact(4) {
+                    values.push(u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+                }
+                Some(values)
+            }
+            PropertyValue::U32(val) => Some(vec![*val]),
             _ => None,
         })
     }
@@ -152,7 +156,9 @@ impl DeviceTreeNode {
     pub fn prop_u64(&self, name: &str) -> Option<u64> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::U64(val) => Some(*val),
-            PropertyValue::U64Array(arr) if !arr.is_empty() => Some(arr[0]),
+            PropertyValue::U64Array(bytes) if bytes.len() >= 8 => Some(u64::from_be_bytes([
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            ])),
             _ => None,
         })
     }
@@ -160,7 +166,7 @@ impl DeviceTreeNode {
     /// Get property value as bytes
     pub fn prop_bytes(&self, name: &str) -> Option<&[u8]> {
         self.find_property(name).and_then(|p| match &p.value {
-            PropertyValue::Bytes(bytes) => Some(bytes.as_slice()),
+            PropertyValue::Bytes(bytes) => Some(*bytes),
             _ => None,
         })
     }
@@ -171,17 +177,17 @@ impl DeviceTreeNode {
     }
 
     /// Get all nodes with a specific property
-    pub fn find_nodes_with_property(&self, property_name: &str) -> Vec<&DeviceTreeNode> {
+    pub fn find_nodes_with_property(&self, property_name: &str) -> Vec<&DeviceTreeNode<'a>> {
         let mut nodes = Vec::new();
         self.collect_nodes_with_property(property_name, &mut nodes);
         nodes
     }
 
     /// Recursively collect nodes with a specific property
-    fn collect_nodes_with_property<'a>(
-        &'a self,
+    fn collect_nodes_with_property<'b>(
+        &'b self,
         property_name: &str,
-        nodes: &mut Vec<&'a DeviceTreeNode>,
+        nodes: &mut Vec<&'b DeviceTreeNode<'a>>,
     ) {
         if self.has_property(property_name) {
             nodes.push(self);
@@ -193,24 +199,24 @@ impl DeviceTreeNode {
     }
 
     /// Get all nodes with a specific compatible string
-    pub fn find_compatible_nodes(&self, compatible: &str) -> Vec<&DeviceTreeNode> {
+    pub fn find_compatible_nodes(&self, compatible: &str) -> Vec<&DeviceTreeNode<'a>> {
         let mut nodes = Vec::new();
         self.collect_compatible_nodes(compatible, &mut nodes);
         nodes
     }
 
     /// Recursively collect nodes with a specific compatible string
-    fn collect_compatible_nodes<'a>(
-        &'a self,
+    fn collect_compatible_nodes<'b>(
+        &'b self,
         compatible: &str,
-        nodes: &mut Vec<&'a DeviceTreeNode>,
+        nodes: &mut Vec<&'b DeviceTreeNode<'a>>,
     ) {
         if let Some(compat_prop) = self.find_property("compatible") {
             match &compat_prop.value {
-                PropertyValue::String(s) if s == compatible => {
+                PropertyValue::String(s) if *s == compatible => {
                     nodes.push(self);
                 }
-                PropertyValue::StringList(list) if list.contains(&compatible.to_string()) => {
+                PropertyValue::StringList(list) if list.contains(&compatible) => {
                     nodes.push(self);
                 }
                 _ => {}
@@ -223,34 +229,34 @@ impl DeviceTreeNode {
     }
 
     /// Get iterator over all nodes (depth-first traversal)
-    pub fn iter_nodes(&self) -> NodeIterator<'_> {
+    pub fn iter_nodes(&self) -> NodeIterator<'a, '_> {
         NodeIterator::new(self)
     }
 
     /// Get iterator over all properties
-    pub fn iter_properties(&self) -> core::slice::Iter<'_, Property> {
+    pub fn iter_properties(&self) -> core::slice::Iter<'_, Property<'a>> {
         self.properties.iter()
     }
 
     /// Get iterator over child nodes
-    pub fn iter_children(&self) -> core::slice::Iter<'_, DeviceTreeNode> {
+    pub fn iter_children(&self) -> core::slice::Iter<'_, DeviceTreeNode<'a>> {
         self.children.iter()
     }
 }
 
 /// Iterator for depth-first traversal of device tree nodes
-pub struct NodeIterator<'a> {
-    stack: Vec<&'a DeviceTreeNode>,
+pub struct NodeIterator<'a, 'b> {
+    stack: Vec<&'b DeviceTreeNode<'a>>,
 }
 
-impl<'a> NodeIterator<'a> {
-    fn new(root: &'a DeviceTreeNode) -> Self {
+impl<'a, 'b> NodeIterator<'a, 'b> {
+    fn new(root: &'b DeviceTreeNode<'a>) -> Self {
         Self { stack: vec![root] }
     }
 }
 
-impl<'a> Iterator for NodeIterator<'a> {
-    type Item = &'a DeviceTreeNode;
+impl<'a, 'b> Iterator for NodeIterator<'a, 'b> {
+    type Item = &'b DeviceTreeNode<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(node) = self.stack.pop() {
@@ -266,22 +272,20 @@ impl<'a> Iterator for NodeIterator<'a> {
 }
 
 /// Parse a null-terminated string from bytes
-pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], String), DtbError> {
+pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], &str), DtbError> {
     let null_pos = input
         .iter()
         .position(|&b| b == 0)
         .ok_or(DtbError::MalformedHeader)?;
 
     let string_bytes = &input[..null_pos];
-    let string = core::str::from_utf8(string_bytes)
-        .map_err(|_| DtbError::MalformedHeader)?
-        .to_string();
+    let string = core::str::from_utf8(string_bytes).map_err(|_| DtbError::MalformedHeader)?;
 
     Ok((&input[null_pos + 1..], string))
 }
 
-/// Parse node name after FDT_BEGIN_NODE token
-pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], String), DtbError> {
+/// Parse node name after `FDT_BEGIN_NODE` token
+pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], &str), DtbError> {
     let (remaining, name) = parse_null_terminated_string(input)?;
 
     // Skip padding to 4-byte alignment
@@ -295,11 +299,11 @@ pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], String), DtbError> {
     Ok((&remaining[padding..], name))
 }
 
-/// Parse property data after FDT_PROP token
+/// Parse property data after `FDT_PROP` token
 pub fn parse_property_data<'a>(
     input: &'a [u8],
     strings_block: &'a [u8],
-) -> Result<(&'a [u8], Property), DtbError> {
+) -> Result<(&'a [u8], Property<'a>), DtbError> {
     if input.len() < 8 {
         return Err(DtbError::MalformedHeader);
     }
@@ -335,7 +339,7 @@ pub fn parse_property_data<'a>(
 }
 
 /// Resolve property name from strings block using offset
-fn resolve_property_name(strings_block: &[u8], offset: usize) -> Result<String, DtbError> {
+fn resolve_property_name(strings_block: &[u8], offset: usize) -> Result<&str, DtbError> {
     if offset >= strings_block.len() {
         return Err(DtbError::MalformedHeader);
     }
@@ -346,7 +350,7 @@ fn resolve_property_name(strings_block: &[u8], offset: usize) -> Result<String, 
 }
 
 /// Parse property value from raw bytes
-fn parse_property_value(data: &[u8]) -> PropertyValue {
+fn parse_property_value(data: &[u8]) -> PropertyValue<'_> {
     if data.is_empty() {
         return PropertyValue::Empty;
     }
@@ -358,42 +362,34 @@ fn parse_property_value(data: &[u8]) -> PropertyValue {
 
     // Try to parse as u32 array
     if data.len() % 4 == 0 && !data.is_empty() {
-        let mut values = Vec::new();
-        for chunk in data.chunks_exact(4) {
-            let value = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-            values.push(value);
+        // For single u32 value, parse it directly
+        if data.len() == 4 {
+            let value = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+            return PropertyValue::U32(value);
         }
-
-        if values.len() == 1 {
-            return PropertyValue::U32(values[0]);
-        } else {
-            return PropertyValue::U32Array(values);
-        }
+        // Store raw bytes for arrays
+        return PropertyValue::U32Array(data);
     }
 
     // Try to parse as u64 array
     if data.len() % 8 == 0 && !data.is_empty() {
-        let mut values = Vec::new();
-        for chunk in data.chunks_exact(8) {
+        // For single u64 value, parse it directly
+        if data.len() == 8 {
             let value = u64::from_be_bytes([
-                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+                data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
             ]);
-            values.push(value);
+            return PropertyValue::U64(value);
         }
-
-        if values.len() == 1 {
-            return PropertyValue::U64(values[0]);
-        } else {
-            return PropertyValue::U64Array(values);
-        }
+        // Store raw bytes for arrays
+        return PropertyValue::U64Array(data);
     }
 
     // Fall back to raw bytes
-    PropertyValue::Bytes(data.to_vec())
+    PropertyValue::Bytes(data)
 }
 
 /// Try to parse data as string or string list
-fn parse_as_strings(data: &[u8]) -> Result<PropertyValue, ()> {
+fn parse_as_strings(data: &[u8]) -> Result<PropertyValue<'_>, ()> {
     // Check if all bytes are valid UTF-8 or null
     if !data
         .iter()
@@ -410,7 +406,7 @@ fn parse_as_strings(data: &[u8]) -> Result<PropertyValue, ()> {
             if start < i {
                 let string_bytes = &data[start..i];
                 if let Ok(s) = core::str::from_utf8(string_bytes) {
-                    strings.push(s.to_string());
+                    strings.push(s);
                 } else {
                     return Err(());
                 }
@@ -423,7 +419,7 @@ fn parse_as_strings(data: &[u8]) -> Result<PropertyValue, ()> {
     if start < data.len() {
         let string_bytes = &data[start..];
         if let Ok(s) = core::str::from_utf8(string_bytes) {
-            strings.push(s.to_string());
+            strings.push(s);
         } else {
             return Err(());
         }
@@ -431,7 +427,7 @@ fn parse_as_strings(data: &[u8]) -> Result<PropertyValue, ()> {
 
     match strings.len() {
         0 => Ok(PropertyValue::Empty),
-        1 => Ok(PropertyValue::String(strings.into_iter().next().unwrap())),
+        1 => Ok(PropertyValue::String(strings[0])),
         _ => Ok(PropertyValue::StringList(strings)),
     }
 }
@@ -442,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_device_tree_node_creation() {
-        let node = DeviceTreeNode::new("test".to_string());
+        let node = DeviceTreeNode::new("test");
         assert_eq!(node.name, "test");
         assert!(node.properties.is_empty());
         assert!(node.children.is_empty());
@@ -479,7 +475,10 @@ mod tests {
     fn test_parse_property_value_string() {
         let data = b"hello\0";
         let value = parse_property_value(data);
-        assert_eq!(value, PropertyValue::String("hello".to_string()));
+        match value {
+            PropertyValue::String(s) => assert_eq!(s, "hello"),
+            _ => panic!("Expected String value"),
+        }
     }
 
     #[test]
@@ -491,18 +490,21 @@ mod tests {
 
     #[test]
     fn test_node_property_accessors() {
-        let mut node = DeviceTreeNode::new("test".to_string());
+        let name1 = "test-u32";
+        let name2 = "test-string";
+        let value_str = "hello";
+        let mut node = DeviceTreeNode::new("test");
 
         // Add u32 property
         node.add_property(Property {
-            name: "test-u32".to_string(),
+            name: name1,
             value: PropertyValue::U32(42),
         });
 
         // Add string property
         node.add_property(Property {
-            name: "test-string".to_string(),
-            value: PropertyValue::String("hello".to_string()),
+            name: name2,
+            value: PropertyValue::String(value_str),
         });
 
         assert_eq!(node.prop_u32("test-u32"), Some(42));
@@ -512,13 +514,15 @@ mod tests {
 
     #[test]
     fn test_node_path_lookup() {
-        let mut root = DeviceTreeNode::new("".to_string());
-        let mut cpus = DeviceTreeNode::new("cpus".to_string());
-        let mut cpu0 = DeviceTreeNode::new("cpu@0".to_string());
+        let device_type = "device_type";
+        let cpu_str = "cpu";
+        let mut root = DeviceTreeNode::new("");
+        let mut cpus = DeviceTreeNode::new("cpus");
+        let mut cpu0 = DeviceTreeNode::new("cpu@0");
 
         cpu0.add_property(Property {
-            name: "device_type".to_string(),
-            value: PropertyValue::String("cpu".to_string()),
+            name: device_type,
+            value: PropertyValue::String(cpu_str),
         });
 
         cpus.add_child(cpu0);
@@ -539,18 +543,21 @@ mod tests {
 
     #[test]
     fn test_compatible_node_search() {
-        let mut root = DeviceTreeNode::new("".to_string());
-        let mut uart1 = DeviceTreeNode::new("uart@1000".to_string());
-        let mut uart2 = DeviceTreeNode::new("uart@2000".to_string());
+        let compatible = "compatible";
+        let ns16550a = "ns16550a";
+        let ns16550 = "ns16550";
+        let mut root = DeviceTreeNode::new("");
+        let mut uart1 = DeviceTreeNode::new("uart@1000");
+        let mut uart2 = DeviceTreeNode::new("uart@2000");
 
         uart1.add_property(Property {
-            name: "compatible".to_string(),
-            value: PropertyValue::String("ns16550a".to_string()),
+            name: compatible,
+            value: PropertyValue::String(ns16550a),
         });
 
         uart2.add_property(Property {
-            name: "compatible".to_string(),
-            value: PropertyValue::StringList(vec!["ns16550a".to_string(), "ns16550".to_string()]),
+            name: compatible,
+            value: PropertyValue::StringList(vec![ns16550a, ns16550]),
         });
 
         root.add_child(uart1);
@@ -565,10 +572,10 @@ mod tests {
 
     #[test]
     fn test_node_iterator() {
-        let mut root = DeviceTreeNode::new("".to_string());
-        let mut child1 = DeviceTreeNode::new("child1".to_string());
-        let child2 = DeviceTreeNode::new("child2".to_string());
-        let grandchild = DeviceTreeNode::new("grandchild".to_string());
+        let mut root = DeviceTreeNode::new("");
+        let mut child1 = DeviceTreeNode::new("child1");
+        let child2 = DeviceTreeNode::new("child2");
+        let grandchild = DeviceTreeNode::new("grandchild");
 
         child1.add_child(grandchild);
         root.add_child(child1);
@@ -586,26 +593,31 @@ mod tests {
 
     #[test]
     fn test_property_types() {
-        let mut node = DeviceTreeNode::new("test".to_string());
+        let u32_prop = "u32-prop";
+        let u64_prop = "u64-prop";
+        let bytes_prop = "bytes-prop";
+        let empty_prop = "empty-prop";
+        let bytes_data = &[1u8, 2, 3, 4];
+        let mut node = DeviceTreeNode::new("test");
 
         // Add various property types
         node.add_property(Property {
-            name: "u32-prop".to_string(),
+            name: u32_prop,
             value: PropertyValue::U32(42),
         });
 
         node.add_property(Property {
-            name: "u64-prop".to_string(),
+            name: u64_prop,
             value: PropertyValue::U64(0x123456789),
         });
 
         node.add_property(Property {
-            name: "bytes-prop".to_string(),
-            value: PropertyValue::Bytes(vec![1, 2, 3, 4]),
+            name: bytes_prop,
+            value: PropertyValue::Bytes(bytes_data),
         });
 
         node.add_property(Property {
-            name: "empty-prop".to_string(),
+            name: empty_prop,
             value: PropertyValue::Empty,
         });
 
