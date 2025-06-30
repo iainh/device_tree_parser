@@ -5,8 +5,10 @@ pub mod error;
 pub mod header;
 pub mod memory;
 pub mod parser;
+pub mod tokens;
 
 pub use error::DtbError;
 pub use header::DtbHeader;
 pub use memory::MemoryReservation;
 pub use parser::DeviceTreeParser;
+pub use tokens::DtbToken;
