@@ -87,6 +87,15 @@ impl DtbHeader {
     pub const SIZE: usize = 40;
 
     /// Parse DTB header from input bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::MalformedHeader` if input is too short or contains invalid data.
+    /// Returns `DtbError::InvalidMagic` if the magic number is incorrect.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal slice operations fail due to data corruption.
     pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError> {
         if input.len() < Self::SIZE {
             return Err(DtbError::MalformedHeader);

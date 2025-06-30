@@ -27,6 +27,10 @@ impl DtbToken {
     pub const FDT_END: u32 = 0x0000_0009;
 
     /// Convert u32 value to `DtbToken`
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidToken` if the value is not a valid token.
     pub fn from_u32(value: u32) -> Result<Self, DtbError> {
         match value {
             Self::FDT_BEGIN_NODE => Ok(DtbToken::BeginNode),
@@ -38,6 +42,7 @@ impl DtbToken {
     }
 
     /// Convert `DtbToken` to u32 value
+    #[must_use]
     pub fn to_u32(self) -> u32 {
         match self {
             DtbToken::BeginNode => Self::FDT_BEGIN_NODE,
@@ -48,6 +53,12 @@ impl DtbToken {
     }
 
     /// Parse a single token from input bytes with 4-byte alignment
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::MalformedHeader` if input is too short.
+    /// Returns `DtbError::AlignmentError` if input is not 4-byte aligned.
+    /// Returns `DtbError::InvalidToken` if token value is not recognized.
     pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError> {
         if input.len() < 4 {
             return Err(DtbError::MalformedHeader);
@@ -69,11 +80,13 @@ impl DtbToken {
     }
 
     /// Calculate padding needed for 4-byte alignment
+    #[must_use]
     pub fn calculate_padding(offset: usize) -> usize {
         (4 - (offset % 4)) % 4
     }
 
     /// Skip padding bytes to achieve 4-byte alignment
+    #[must_use]
     pub fn skip_padding(input: &[u8], current_offset: usize) -> &[u8] {
         let padding = Self::calculate_padding(current_offset);
         if padding > 0 && input.len() >= padding {

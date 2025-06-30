@@ -60,6 +60,11 @@ impl MemoryReservation {
     pub const SIZE: usize = 16;
 
     /// Parse memory reservations from input bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::AlignmentError` if input is not 8-byte aligned.
+    /// Returns `DtbError::MalformedHeader` if data is truncated or malformed.
     pub fn parse_all(input: &[u8]) -> Result<(&[u8], Vec<Self>), DtbError> {
         // Ensure 8-byte alignment
         if (input.as_ptr() as usize) % 8 != 0 {

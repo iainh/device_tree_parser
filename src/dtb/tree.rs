@@ -104,11 +104,140 @@ pub struct Property<'a> {
     pub value: PropertyValue<'a>,
 }
 
+/// Address specification for device tree nodes.
+///
+/// Represents the addressing configuration used by a node's children. This determines
+/// how addresses and sizes are represented in properties like `reg` and `ranges`.
+/// Most commonly, addresses use 2 cells (64-bit) and sizes use 1 cell (32-bit).
+///
+/// # Examples
+///
+/// ```rust
+/// # use device_tree_parser::AddressSpec;
+/// // Default addressing (2 address cells, 1 size cell)
+/// let default_spec = AddressSpec::default();
+/// assert_eq!(default_spec.address_cells(), 2);
+/// assert_eq!(default_spec.size_cells(), 1);
+///
+/// // 32-bit addressing (1 address cell, 1 size cell)
+/// let spec_32bit = AddressSpec::new(1, 1).unwrap();
+///
+/// // PCI addressing (3 address cells, 2 size cells)
+/// let spec_pci = AddressSpec::new(3, 2).unwrap();
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AddressSpec {
+    address_cells: u32,
+    size_cells: u32,
+}
+
+impl AddressSpec {
+    /// Default number of address cells (2 for 64-bit addresses).
+    pub const DEFAULT_ADDRESS_CELLS: u32 = 2;
+
+    /// Default number of size cells (1 for 32-bit sizes).
+    pub const DEFAULT_SIZE_CELLS: u32 = 1;
+
+    /// Maximum allowed address cells (4 for up to 128-bit addresses).
+    pub const MAX_ADDRESS_CELLS: u32 = 4;
+
+    /// Maximum allowed size cells (4 for up to 128-bit sizes).
+    pub const MAX_SIZE_CELLS: u32 = 4;
+
+    /// Creates a new address specification with validation.
+    ///
+    /// # Arguments
+    ///
+    /// * `address_cells` - Number of cells for addresses (1-4)
+    /// * `size_cells` - Number of cells for sizes (0-4)
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::InvalidAddressCells` if `address_cells` is not in range 1-4.
+    /// Returns `DtbError::InvalidSizeCells` if `size_cells` is not in range 0-4.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{AddressSpec, DtbError};
+    /// // Valid specifications
+    /// let spec = AddressSpec::new(2, 1)?;
+    /// assert_eq!(spec.address_cells(), 2);
+    ///
+    /// // Invalid address cells
+    /// assert!(AddressSpec::new(5, 1).is_err());
+    ///
+    /// // Size cells can be 0 (for address-only nodes)
+    /// let addr_only = AddressSpec::new(2, 0)?;
+    /// # Ok::<(), DtbError>(())
+    /// ```
+    pub fn new(address_cells: u32, size_cells: u32) -> Result<Self, DtbError> {
+        if address_cells == 0 || address_cells > Self::MAX_ADDRESS_CELLS {
+            return Err(DtbError::InvalidAddressCells(address_cells));
+        }
+        if size_cells > Self::MAX_SIZE_CELLS {
+            return Err(DtbError::InvalidSizeCells(size_cells));
+        }
+        Ok(Self {
+            address_cells,
+            size_cells,
+        })
+    }
+
+    /// Returns the number of cells used for addresses.
+    #[must_use]
+    pub const fn address_cells(&self) -> u32 {
+        self.address_cells
+    }
+
+    /// Returns the number of cells used for sizes.
+    #[must_use]
+    pub const fn size_cells(&self) -> u32 {
+        self.size_cells
+    }
+
+    /// Returns the total number of cells for a complete address/size pair.
+    #[must_use]
+    pub const fn total_cells(&self) -> u32 {
+        self.address_cells + self.size_cells
+    }
+
+    /// Returns the byte size of addresses based on cell count.
+    #[must_use]
+    pub const fn address_size_bytes(&self) -> usize {
+        (self.address_cells * 4) as usize
+    }
+
+    /// Returns the byte size of sizes based on cell count.
+    #[must_use]
+    pub const fn size_size_bytes(&self) -> usize {
+        (self.size_cells * 4) as usize
+    }
+
+    /// Returns the total byte size for a complete address/size pair.
+    #[must_use]
+    pub const fn total_size_bytes(&self) -> usize {
+        (self.total_cells() * 4) as usize
+    }
+}
+
+impl Default for AddressSpec {
+    /// Creates default address specification (2 address cells, 1 size cell).
+    ///
+    /// This is the most common configuration for 64-bit systems.
+    fn default() -> Self {
+        Self {
+            address_cells: Self::DEFAULT_ADDRESS_CELLS,
+            size_cells: Self::DEFAULT_SIZE_CELLS,
+        }
+    }
+}
+
 /// Device tree node representing a hardware component or logical grouping.
 ///
 /// Device tree nodes form a hierarchical structure describing system hardware.
 /// Each node has a name, properties describing its characteristics, and optionally
-/// child nodes. Provides ergonomic access through Index traits, IntoIterator,
+/// child nodes. Provides ergonomic access through Index traits, `IntoIterator`,
 /// and search methods.
 ///
 /// # Examples
@@ -195,6 +324,7 @@ pub struct DeviceTreeNode<'a> {
 
 impl<'a> DeviceTreeNode<'a> {
     /// Create a new device tree node
+    #[must_use]
     pub fn new(name: &'a str) -> Self {
         Self {
             name,
@@ -214,16 +344,19 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Find a property by name
+    #[must_use]
     pub fn find_property(&self, name: &str) -> Option<&Property<'a>> {
         self.properties.iter().find(|p| p.name == name)
     }
 
     /// Find a child node by name
+    #[must_use]
     pub fn find_child(&self, name: &str) -> Option<&DeviceTreeNode<'a>> {
         self.children.iter().find(|c| c.name == name)
     }
 
     /// Find a node by path (e.g., "/cpus/cpu@0")
+    #[must_use]
     pub fn find_node(&self, path: &str) -> Option<&DeviceTreeNode<'a>> {
         if path.is_empty() || path == "/" {
             return Some(self);
@@ -265,6 +398,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get property value as u32
+    #[must_use]
     pub fn prop_u32(&self, name: &str) -> Option<u32> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::U32(val) => Some(*val),
@@ -276,6 +410,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get property value as string
+    #[must_use]
     pub fn prop_string(&self, name: &str) -> Option<&str> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::String(s) => Some(*s),
@@ -285,6 +420,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get property value as u32 array
+    #[must_use]
     pub fn prop_u32_array(&self, name: &str) -> Option<Vec<u32>> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::U32Array(bytes) => {
@@ -300,6 +436,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get property value as u64
+    #[must_use]
     pub fn prop_u64(&self, name: &str) -> Option<u64> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::U64(val) => Some(*val),
@@ -311,6 +448,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get property value as bytes
+    #[must_use]
     pub fn prop_bytes(&self, name: &str) -> Option<&[u8]> {
         self.find_property(name).and_then(|p| match &p.value {
             PropertyValue::Bytes(bytes) => Some(*bytes),
@@ -319,11 +457,13 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Check if property exists
+    #[must_use]
     pub fn has_property(&self, name: &str) -> bool {
         self.find_property(name).is_some()
     }
 
     /// Get all nodes with a specific property
+    #[must_use]
     pub fn find_nodes_with_property(&self, property_name: &str) -> Vec<&DeviceTreeNode<'a>> {
         let mut nodes = Vec::new();
         self.collect_nodes_with_property(property_name, &mut nodes);
@@ -346,6 +486,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get all nodes with a specific compatible string
+    #[must_use]
     pub fn find_compatible_nodes(&self, compatible: &str) -> Vec<&DeviceTreeNode<'a>> {
         let mut nodes = Vec::new();
         self.collect_compatible_nodes(compatible, &mut nodes);
@@ -376,6 +517,7 @@ impl<'a> DeviceTreeNode<'a> {
     }
 
     /// Get iterator over all nodes (depth-first traversal)
+    #[must_use]
     pub fn iter_nodes(&self) -> NodeIterator<'a, '_> {
         NodeIterator::new(self)
     }
@@ -412,7 +554,7 @@ impl<'a> Index<usize> for DeviceTreeNode<'a> {
     }
 }
 
-/// IntoIterator trait for iterating over child nodes
+/// `IntoIterator` trait for iterating over child nodes
 impl<'a> IntoIterator for &'a DeviceTreeNode<'a> {
     type Item = &'a DeviceTreeNode<'a>;
     type IntoIter = core::slice::Iter<'a, DeviceTreeNode<'a>>;
@@ -422,8 +564,8 @@ impl<'a> IntoIterator for &'a DeviceTreeNode<'a> {
     }
 }
 
-/// Display trait for PropertyValue
-impl<'a> Display for PropertyValue<'a> {
+/// Display trait for `PropertyValue`
+impl Display for PropertyValue<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             PropertyValue::Empty => write!(f, "<empty>"),
@@ -480,20 +622,20 @@ impl<'a> Display for PropertyValue<'a> {
 }
 
 /// Display trait for Property
-impl<'a> Display for Property<'a> {
+impl Display for Property<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{} = {}", self.name, self.value)
     }
 }
 
-/// Display trait for DeviceTreeNode
-impl<'a> Display for DeviceTreeNode<'a> {
+/// Display trait for `DeviceTreeNode`
+impl Display for DeviceTreeNode<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.fmt_with_indent(f, 0)
     }
 }
 
-impl<'a> DeviceTreeNode<'a> {
+impl DeviceTreeNode<'_> {
     fn fmt_with_indent(&self, f: &mut Formatter<'_>, indent: usize) -> fmt::Result {
         let indent_str = "  ".repeat(indent);
 
@@ -515,8 +657,8 @@ impl<'a> DeviceTreeNode<'a> {
     }
 }
 
-/// Default trait for DeviceTreeNode
-impl<'a> Default for DeviceTreeNode<'a> {
+/// Default trait for `DeviceTreeNode`
+impl Default for DeviceTreeNode<'_> {
     fn default() -> Self {
         Self {
             name: "",
@@ -526,14 +668,14 @@ impl<'a> Default for DeviceTreeNode<'a> {
     }
 }
 
-/// Default trait for PropertyValue
-impl<'a> Default for PropertyValue<'a> {
+/// Default trait for `PropertyValue`
+impl Default for PropertyValue<'_> {
     fn default() -> Self {
         PropertyValue::Empty
     }
 }
 
-/// TryFrom trait for converting PropertyValue to u32
+/// `TryFrom` trait for converting `PropertyValue` to u32
 impl<'a> TryFrom<&PropertyValue<'a>> for u32 {
     type Error = DtbError;
 
@@ -548,7 +690,7 @@ impl<'a> TryFrom<&PropertyValue<'a>> for u32 {
     }
 }
 
-/// TryFrom trait for converting PropertyValue to u64
+/// `TryFrom` trait for converting `PropertyValue` to u64
 impl<'a> TryFrom<&PropertyValue<'a>> for u64 {
     type Error = DtbError;
 
@@ -558,17 +700,17 @@ impl<'a> TryFrom<&PropertyValue<'a>> for u64 {
             PropertyValue::U64Array(bytes) if bytes.len() >= 8 => Ok(u64::from_be_bytes([
                 bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
             ])),
-            PropertyValue::U32(val) => Ok(*val as u64),
+            PropertyValue::U32(val) => Ok(u64::from(*val)),
             PropertyValue::U32Array(bytes) if bytes.len() >= 4 => {
                 let val = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-                Ok(val as u64)
+                Ok(u64::from(val))
             }
             _ => Err(DtbError::InvalidToken),
         }
     }
 }
 
-/// TryFrom trait for converting PropertyValue to &str
+/// `TryFrom` trait for converting `PropertyValue` to &str
 impl<'a> TryFrom<&PropertyValue<'a>> for &'a str {
     type Error = DtbError;
 
@@ -581,7 +723,7 @@ impl<'a> TryFrom<&PropertyValue<'a>> for &'a str {
     }
 }
 
-/// TryFrom trait for converting PropertyValue to `Vec<u32>`
+/// `TryFrom` trait for converting `PropertyValue` to `Vec<u32>`
 impl<'a> TryFrom<&PropertyValue<'a>> for Vec<u32> {
     type Error = DtbError;
 
@@ -600,15 +742,15 @@ impl<'a> TryFrom<&PropertyValue<'a>> for Vec<u32> {
     }
 }
 
-/// TryFrom trait for converting PropertyValue to &[u8]
+/// `TryFrom` trait for converting `PropertyValue` to &[u8]
 impl<'a> TryFrom<&PropertyValue<'a>> for &'a [u8] {
     type Error = DtbError;
 
     fn try_from(value: &PropertyValue<'a>) -> Result<Self, Self::Error> {
         match value {
-            PropertyValue::Bytes(bytes) => Ok(*bytes),
-            PropertyValue::U32Array(bytes) => Ok(*bytes),
-            PropertyValue::U64Array(bytes) => Ok(*bytes),
+            PropertyValue::Bytes(bytes)
+            | PropertyValue::U32Array(bytes)
+            | PropertyValue::U64Array(bytes) => Ok(*bytes),
             _ => Err(DtbError::InvalidToken),
         }
     }
@@ -642,6 +784,11 @@ impl<'a, 'b> Iterator for NodeIterator<'a, 'b> {
 }
 
 /// Parse a null-terminated string from bytes
+///
+/// # Errors
+///
+/// Returns `DtbError::MalformedHeader` if no null terminator is found
+/// or if the string contains invalid UTF-8.
 pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], &str), DtbError> {
     let null_pos = input
         .iter()
@@ -655,6 +802,10 @@ pub fn parse_null_terminated_string(input: &[u8]) -> Result<(&[u8], &str), DtbEr
 }
 
 /// Parse node name after `FDT_BEGIN_NODE` token
+///
+/// # Errors
+///
+/// Returns `DtbError::MalformedHeader` if the node name is malformed.
 pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], &str), DtbError> {
     let (remaining, name) = parse_null_terminated_string(input)?;
 
@@ -670,6 +821,10 @@ pub fn parse_node_name(input: &[u8]) -> Result<(&[u8], &str), DtbError> {
 }
 
 /// Parse property data after `FDT_PROP` token
+///
+/// # Errors
+///
+/// Returns `DtbError::MalformedHeader` if input is too short or data is corrupted.
 pub fn parse_property_data<'a>(
     input: &'a [u8],
     strings_block: &'a [u8],
@@ -822,6 +977,65 @@ mod tests {
         let (remaining, string) = result.unwrap();
         assert_eq!(string, "hello");
         assert_eq!(remaining, b"world");
+    }
+
+    #[test]
+    fn test_address_spec_creation() {
+        // Valid specifications
+        let spec1 = AddressSpec::new(2, 1).unwrap();
+        assert_eq!(spec1.address_cells(), 2);
+        assert_eq!(spec1.size_cells(), 1);
+        assert_eq!(spec1.total_cells(), 3);
+
+        let spec2 = AddressSpec::new(1, 2).unwrap();
+        assert_eq!(spec2.address_cells(), 1);
+        assert_eq!(spec2.size_cells(), 2);
+
+        // Edge cases
+        let spec_min = AddressSpec::new(1, 0).unwrap();
+        assert_eq!(spec_min.address_cells(), 1);
+        assert_eq!(spec_min.size_cells(), 0);
+
+        let spec_max = AddressSpec::new(4, 4).unwrap();
+        assert_eq!(spec_max.address_cells(), 4);
+        assert_eq!(spec_max.size_cells(), 4);
+    }
+
+    #[test]
+    fn test_address_spec_validation() {
+        // Invalid address cells
+        assert!(matches!(
+            AddressSpec::new(0, 1),
+            Err(DtbError::InvalidAddressCells(0))
+        ));
+        assert!(matches!(
+            AddressSpec::new(5, 1),
+            Err(DtbError::InvalidAddressCells(5))
+        ));
+
+        // Invalid size cells
+        assert!(matches!(
+            AddressSpec::new(2, 5),
+            Err(DtbError::InvalidSizeCells(5))
+        ));
+    }
+
+    #[test]
+    fn test_address_spec_defaults() {
+        let default_spec = AddressSpec::default();
+        assert_eq!(default_spec.address_cells(), 2);
+        assert_eq!(default_spec.size_cells(), 1);
+        assert_eq!(default_spec.address_size_bytes(), 8);
+        assert_eq!(default_spec.size_size_bytes(), 4);
+        assert_eq!(default_spec.total_size_bytes(), 12);
+    }
+
+    #[test]
+    fn test_address_spec_byte_calculations() {
+        let spec = AddressSpec::new(3, 2).unwrap();
+        assert_eq!(spec.address_size_bytes(), 12); // 3 cells * 4 bytes
+        assert_eq!(spec.size_size_bytes(), 8); // 2 cells * 4 bytes
+        assert_eq!(spec.total_size_bytes(), 20); // 5 cells * 4 bytes
     }
 
     #[test]

@@ -62,6 +62,34 @@ pub enum DtbError {
     /// This error occurs when data is not properly aligned, typically
     /// indicating file corruption or truncation.
     AlignmentError,
+
+    /// Invalid address cell specification.
+    ///
+    /// Address cells must be between 1 and 4 (typically 1 or 2).
+    /// This error occurs when `#address-cells` property contains an
+    /// invalid value outside this range.
+    InvalidAddressCells(u32),
+
+    /// Invalid size cell specification.
+    ///
+    /// Size cells must be between 0 and 4 (typically 1 or 2).
+    /// This error occurs when `#size-cells` property contains an
+    /// invalid value outside this range.
+    InvalidSizeCells(u32),
+
+    /// Address translation error.
+    ///
+    /// Occurs when an address cannot be translated between bus domains.
+    /// This can happen when no matching range is found or when address
+    /// arithmetic would overflow.
+    AddressTranslationError(u64),
+
+    /// Invalid ranges property format.
+    ///
+    /// The ranges property must contain entries that are a multiple of
+    /// (`child_address_cells` + `address_cells` + `size_cells`) * 4 bytes.
+    /// This error indicates malformed ranges data.
+    InvalidRangesFormat,
 }
 
 impl fmt::Display for DtbError {
@@ -71,6 +99,18 @@ impl fmt::Display for DtbError {
             DtbError::MalformedHeader => write!(f, "Malformed DTB header structure"),
             DtbError::InvalidToken => write!(f, "Invalid token in structure block"),
             DtbError::AlignmentError => write!(f, "Data alignment error"),
+            DtbError::InvalidAddressCells(cells) => {
+                write!(f, "Invalid #address-cells value: {cells} (must be 1-4)")
+            }
+            DtbError::InvalidSizeCells(cells) => {
+                write!(f, "Invalid #size-cells value: {cells} (must be 0-4)")
+            }
+            DtbError::AddressTranslationError(addr) => {
+                write!(f, "Cannot translate address 0x{addr:x}")
+            }
+            DtbError::InvalidRangesFormat => {
+                write!(f, "Invalid ranges property format")
+            }
         }
     }
 }

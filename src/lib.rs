@@ -34,8 +34,8 @@
 //! ## Features
 //!
 //! - **Zero-copy parsing**: Borrows from original DTB buffer for performance
-//! - **Ergonomic APIs**: Index traits, IntoIterator, TryFrom conversions
-//! - **no_std compatible**: Works in embedded environments with `alloc`
+//! - **Ergonomic APIs**: Index traits, `IntoIterator`, `TryFrom` conversions
+//! - **`no_std` compatible**: Works in embedded environments with `alloc`
 //! - **Type-safe**: Strong typing for device tree structures and properties
 //! - **Real-world tested**: Validated against QEMU-generated DTB files
 //!
@@ -59,8 +59,8 @@ mod integration_tests;
 
 // Re-export main types
 pub use dtb::{
-    DeviceTreeNode, DeviceTreeParser, DtbError, DtbHeader, DtbToken, MemoryReservation,
-    NodeIterator, Property, PropertyValue,
+    AddressSpec, DeviceTreeNode, DeviceTreeParser, DtbError, DtbHeader, DtbToken,
+    MemoryReservation, NodeIterator, Property, PropertyValue,
 };
 
 #[cfg(test)]

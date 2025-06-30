@@ -109,6 +109,7 @@ impl<'a> DeviceTreeParser<'a> {
     /// let parser = DeviceTreeParser::new(EMBEDDED_DTB);
     /// # */
     /// ```
+    #[must_use]
     pub fn new(data: &'a [u8]) -> Self {
         Self { data }
     }
@@ -126,6 +127,7 @@ impl<'a> DeviceTreeParser<'a> {
     /// let parser = DeviceTreeParser::new(&dtb_data);
     /// assert_eq!(parser.data().len(), 100);
     /// ```
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         self.data
     }
@@ -135,10 +137,9 @@ impl<'a> DeviceTreeParser<'a> {
     /// Contains metadata about the file structure including version information,
     /// block offsets, and sizes. Typically the first step in DTB analysis.
     ///
-    /// # Returns
+    /// # Errors
     ///
-    /// Returns [`DtbHeader`] containing file metadata, or [`DtbError`] if the
-    /// header is malformed or has an invalid magic number.
+    /// Returns [`DtbError`] if the header is malformed or has an invalid magic number.
     ///
     /// # Examples
     ///
@@ -167,10 +168,9 @@ impl<'a> DeviceTreeParser<'a> {
     /// systems where certain memory regions are reserved for firmware, hardware
     /// buffers, or other special purposes.
     ///
-    /// # Returns
+    /// # Errors
     ///
-    /// Returns a vector of [`MemoryReservation`] entries, or [`DtbError`] if
-    /// the reservation block is malformed.
+    /// Returns [`DtbError`] if the reservation block is malformed.
     ///
     /// # Examples
     ///
@@ -205,10 +205,9 @@ impl<'a> DeviceTreeParser<'a> {
     /// from the root node. The returned tree supports ergonomic access patterns
     /// including indexing, iteration, and type-safe property value extraction.
     ///
-    /// # Returns
+    /// # Errors
     ///
-    /// Returns the root [`DeviceTreeNode`] with all children and properties
-    /// parsed, or [`DtbError`] if the structure is malformed.
+    /// Returns [`DtbError`] if the structure is malformed.
     ///
     /// # Examples
     ///
@@ -272,14 +271,17 @@ impl<'a> DeviceTreeParser<'a> {
     ///
     /// Searches for these compatible strings:
     /// - `ns16550a`, `ns16550` - PC-style 16550 UARTs
-    /// - `arm,pl011` - ARM PrimeCell UART
+    /// - `arm,pl011` - ARM `PrimeCell` UART
     /// - `arm,sbsa-uart` - ARM Server Base System Architecture UART
-    /// - `snps,dw-apb-uart` - Synopsys DesignWare APB UART
+    /// - `snps,dw-apb-uart` - Synopsys `DesignWare` APB UART
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DtbError`] if parsing fails.
     ///
     /// # Returns
     ///
-    /// Returns a vector of UART base addresses, or [`DtbError`] if parsing fails.
-    /// An empty vector indicates no UART devices were found.
+    /// Returns a vector of UART base addresses. An empty vector indicates no UART devices were found.
     ///
     /// # Examples
     ///
@@ -335,10 +337,13 @@ impl<'a> DeviceTreeParser<'a> {
     /// in embedded systems. Searches the `/cpus` node and individual CPU nodes for
     /// the `timebase-frequency` property.
     ///
+    /// # Errors
+    ///
+    /// Returns [`DtbError`] if parsing fails.
+    ///
     /// # Returns
     ///
-    /// Returns `Some(frequency)` if found, `None` if no timebase frequency is
-    /// specified, or [`DtbError`] if parsing fails.
+    /// Returns `Some(frequency)` if found, `None` if no timebase frequency is specified.
     ///
     /// # Examples
     ///
@@ -384,10 +389,13 @@ impl<'a> DeviceTreeParser<'a> {
     /// properties. MMIO regions represent hardware devices mapped into the system's
     /// physical address space.
     ///
+    /// # Errors
+    ///
+    /// Returns [`DtbError`] if parsing fails.
+    ///
     /// # Returns
     ///
-    /// Returns a vector of `(address, size)` tuples representing MMIO regions,
-    /// or [`DtbError`] if parsing fails.
+    /// Returns a vector of `(address, size)` tuples representing MMIO regions.
     ///
     /// # Examples
     ///
@@ -443,10 +451,13 @@ impl<'a> DeviceTreeParser<'a> {
     ///
     /// * `path` - Absolute path to the node (e.g., `/cpus/cpu@0`, `/chosen`)
     ///
+    /// # Errors
+    ///
+    /// Returns [`DtbError`] if parsing fails.
+    ///
     /// # Returns
     ///
-    /// Returns `Some(node)` if found, `None` if the path doesn't exist,
-    /// or [`DtbError`] if parsing fails.
+    /// Returns `Some(node)` if found, `None` if the path doesn't exist.
     ///
     /// # Examples
     ///
@@ -487,10 +498,13 @@ impl<'a> DeviceTreeParser<'a> {
     ///
     /// * `compatible` - Compatible string to search for (e.g., `"arm,pl011"`)
     ///
+    /// # Errors
+    ///
+    /// Returns [`DtbError`] if parsing fails.
+    ///
     /// # Returns
     ///
-    /// Returns a vector of matching nodes, or [`DtbError`] if parsing fails.
-    /// An empty vector indicates no matching nodes were found.
+    /// Returns a vector of matching nodes. An empty vector indicates no matching nodes were found.
     ///
     /// # Examples
     ///
