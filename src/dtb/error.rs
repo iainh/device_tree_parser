@@ -31,9 +31,7 @@ impl<I> ParseError<I> for DtbError<I> {
 impl<I> From<nom::Err<nom::error::Error<I>>> for DtbError<I> {
     fn from(err: nom::Err<nom::error::Error<I>>) -> Self {
         match err {
-            nom::Err::Error(e) | nom::Err::Failure(e) => {
-                DtbError::ParseError(e.input, e.code)
-            }
+            nom::Err::Error(e) | nom::Err::Failure(e) => DtbError::ParseError(e.input, e.code),
             nom::Err::Incomplete(_) => {
                 DtbError::ParseError(unsafe { core::mem::zeroed() }, ErrorKind::Complete)
             }

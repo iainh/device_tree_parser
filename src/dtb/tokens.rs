@@ -25,7 +25,7 @@ impl DtbToken {
     pub const FDT_PROP: u32 = 0x00000003;
     /// End of structure token constant
     pub const FDT_END: u32 = 0x00000009;
-    
+
     /// Convert u32 value to DtbToken
     pub fn from_u32(value: u32) -> Result<Self, DtbError<&'static [u8]>> {
         match value {
@@ -36,7 +36,7 @@ impl DtbToken {
             _ => Err(DtbError::InvalidToken),
         }
     }
-    
+
     /// Convert DtbToken to u32 value
     pub fn to_u32(self) -> u32 {
         match self {
@@ -46,32 +46,33 @@ impl DtbToken {
             DtbToken::End => Self::FDT_END,
         }
     }
-    
+
     /// Parse a single token from input bytes with 4-byte alignment
     pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError<&[u8]>> {
         if input.len() < 4 {
             return Err(DtbError::MalformedHeader);
         }
-        
+
         // Ensure 4-byte alignment
         if (input.as_ptr() as usize) % 4 != 0 {
             return Err(DtbError::AlignmentError);
         }
-        
-        // Parse token value (big-endian u32)
-        let token_value = u32::from_be_bytes([
-            input[0], input[1], input[2], input[3]
-        ]);
-        
+
+        // Parse token value using array slicing
+        let token_bytes: [u8; 4] = input[0..4]
+            .try_into()
+            .map_err(|_| DtbError::MalformedHeader)?;
+        let token_value = u32::from_be_bytes(token_bytes);
+
         let token = Self::from_u32(token_value)?;
         Ok((&input[4..], token))
     }
-    
+
     /// Calculate padding needed for 4-byte alignment
     pub fn calculate_padding(offset: usize) -> usize {
         (4 - (offset % 4)) % 4
     }
-    
+
     /// Skip padding bytes to achieve 4-byte alignment
     pub fn skip_padding(input: &[u8], current_offset: usize) -> &[u8] {
         let padding = Self::calculate_padding(current_offset);
@@ -101,7 +102,7 @@ mod tests {
         assert_eq!(DtbToken::from_u32(0x00000002).unwrap(), DtbToken::EndNode);
         assert_eq!(DtbToken::from_u32(0x00000003).unwrap(), DtbToken::Property);
         assert_eq!(DtbToken::from_u32(0x00000009).unwrap(), DtbToken::End);
-        
+
         assert!(DtbToken::from_u32(0x12345678).is_err());
     }
 
@@ -160,16 +161,16 @@ mod tests {
     #[test]
     fn test_skip_padding() {
         let data = [0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05];
-        
+
         // No padding needed at offset 0
         let result = DtbToken::skip_padding(&data, 0);
         assert_eq!(result, &data);
-        
+
         // 3 bytes padding needed at offset 1
         let result = DtbToken::skip_padding(&data[1..], 1);
         assert_eq!(result, &data[4..]);
-        
-        // 2 bytes padding needed at offset 2  
+
+        // 2 bytes padding needed at offset 2
         let result = DtbToken::skip_padding(&data[2..], 2);
         assert_eq!(result, &data[4..]);
     }

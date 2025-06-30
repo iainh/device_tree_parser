@@ -1,8 +1,6 @@
 // ABOUTME: Core parsing functionality for device tree formats
 // ABOUTME: Contains nom-based parsers for device tree source and binary formats
 
-use alloc::vec::Vec;
-use alloc::string::String;
 use nom::{IResult, bytes::complete::tag};
 
 /// Parse a basic device tree identifier

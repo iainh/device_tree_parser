@@ -31,82 +31,38 @@ pub struct DtbHeader {
 impl DtbHeader {
     /// DTB magic number constant
     pub const MAGIC: u32 = 0xd00dfeed;
-    
+
     /// Header size in bytes
     pub const SIZE: usize = 40;
-    
+
     /// Parse DTB header from input bytes
     pub fn parse(input: &[u8]) -> Result<(&[u8], Self), DtbError<&[u8]>> {
         if input.len() < Self::SIZE {
             return Err(DtbError::MalformedHeader);
         }
-        
-        // Manual big-endian parsing to avoid nom type issues
-        let mut offset = 0;
-        
-        // Parse magic number (bytes 0-3)
-        let magic = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
+
+        // Helper function to read a big-endian u32 from a 4-byte slice
+        let read_be_u32 = |bytes: &[u8]| -> u32 {
+            u32::from_be_bytes(bytes.try_into().expect("slice should be exactly 4 bytes"))
+        };
+
+        // Parse all header fields using chunked slices
+        let mut chunks = input.chunks_exact(4);
+
+        let magic = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
         if magic != Self::MAGIC {
             return Err(DtbError::InvalidMagic);
         }
-        
-        // Parse totalsize (bytes 4-7)
-        let totalsize = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse off_dt_struct (bytes 8-11)
-        let off_dt_struct = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse off_dt_strings (bytes 12-15)
-        let off_dt_strings = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse off_mem_rsvmap (bytes 16-19)
-        let off_mem_rsvmap = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse version (bytes 20-23)
-        let version = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse last_comp_version (bytes 24-27)
-        let last_comp_version = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse boot_cpuid_phys (bytes 28-31)
-        let boot_cpuid_phys = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse size_dt_strings (bytes 32-35)
-        let size_dt_strings = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
-        
-        // Parse size_dt_struct (bytes 36-39)
-        let size_dt_struct = u32::from_be_bytes([
-            input[offset], input[offset + 1], input[offset + 2], input[offset + 3]
-        ]);
-        offset += 4;
+
+        let totalsize = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let off_dt_struct = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let off_dt_strings = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let off_mem_rsvmap = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let version = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let last_comp_version = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let boot_cpuid_phys = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let size_dt_strings = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
+        let size_dt_struct = read_be_u32(chunks.next().ok_or(DtbError::MalformedHeader)?);
 
         let header = DtbHeader {
             magic,
@@ -121,7 +77,7 @@ impl DtbHeader {
             size_dt_struct,
         };
 
-        Ok((&input[offset..], header))
+        Ok((&input[Self::SIZE..], header))
     }
 }
 
@@ -137,7 +93,7 @@ mod tests {
         header_data[0..4].copy_from_slice(&0xd00dfeedu32.to_be_bytes());
         // Total size
         header_data[4..8].copy_from_slice(&1024u32.to_be_bytes());
-        
+
         let result = DtbHeader::parse(&header_data);
         assert!(result.is_ok());
         let (_, header) = result.unwrap();
@@ -150,7 +106,7 @@ mod tests {
         let mut header_data = vec![0u8; 40];
         // Wrong magic number
         header_data[0..4].copy_from_slice(&0x12345678u32.to_be_bytes());
-        
+
         let result = DtbHeader::parse(&header_data);
         assert!(result.is_err());
     }

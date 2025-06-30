@@ -1,8 +1,11 @@
 // ABOUTME: Memory reservation block parsing for device tree blobs
 // ABOUTME: Handles (address, size) pairs with 8-byte alignment requirements
 
-use alloc::vec::Vec;
 use super::error::DtbError;
+use alloc::vec::Vec;
+
+/// Type alias for memory reservation parsing result
+type MemoryReservationResult<'a> = Result<(&'a [u8], Vec<MemoryReservation>), DtbError<&'a [u8]>>;
 
 /// Memory reservation entry with address and size
 #[derive(Debug, Clone, PartialEq)]
@@ -16,46 +19,46 @@ pub struct MemoryReservation {
 impl MemoryReservation {
     /// Size of each reservation entry in bytes (address + size)
     pub const SIZE: usize = 16;
-    
+
     /// Parse memory reservations from input bytes
-    pub fn parse_all(input: &[u8]) -> Result<(&[u8], Vec<Self>), DtbError<&[u8]>> {
-        let mut reservations = Vec::new();
-        let mut offset = 0;
-        
+    pub fn parse_all(input: &[u8]) -> MemoryReservationResult<'_> {
         // Ensure 8-byte alignment
         if (input.as_ptr() as usize) % 8 != 0 {
             return Err(DtbError::AlignmentError);
         }
-        
-        loop {
-            // Check if we have enough bytes for another entry
-            if offset + Self::SIZE > input.len() {
-                return Err(DtbError::MalformedHeader);
-            }
-            
-            // Parse address (bytes 0-7)
-            let address = u64::from_be_bytes([
-                input[offset], input[offset + 1], input[offset + 2], input[offset + 3],
-                input[offset + 4], input[offset + 5], input[offset + 6], input[offset + 7]
-            ]);
-            offset += 8;
-            
-            // Parse size (bytes 8-15)
-            let size = u64::from_be_bytes([
-                input[offset], input[offset + 1], input[offset + 2], input[offset + 3],
-                input[offset + 4], input[offset + 5], input[offset + 6], input[offset + 7]
-            ]);
-            offset += 8;
-            
+
+        let mut reservations = Vec::new();
+        let mut chunks = input.chunks_exact(Self::SIZE);
+
+        for chunk in &mut chunks {
+            // Parse address and size using array slicing
+            let address_bytes: [u8; 8] = chunk[0..8]
+                .try_into()
+                .map_err(|_| DtbError::MalformedHeader)?;
+            let size_bytes: [u8; 8] = chunk[8..16]
+                .try_into()
+                .map_err(|_| DtbError::MalformedHeader)?;
+
+            let address = u64::from_be_bytes(address_bytes);
+            let size = u64::from_be_bytes(size_bytes);
+
             // Check for terminating entry (0, 0)
             if address == 0 && size == 0 {
                 break;
             }
-            
+
             reservations.push(MemoryReservation { address, size });
         }
-        
-        Ok((&input[offset..], reservations))
+
+        // Calculate remaining input after parsing complete reservation entries
+        let consumed = reservations.len() * Self::SIZE + Self::SIZE; // +SIZE for terminating entry
+        let remaining = if consumed <= input.len() {
+            &input[consumed..]
+        } else {
+            &input[input.len()..]
+        };
+
+        Ok((remaining, reservations))
     }
 }
 
@@ -68,10 +71,10 @@ mod tests {
     fn test_memory_reservation_parse_empty() {
         let data = vec![
             // Terminating entry (0, 0)
-            0, 0, 0, 0, 0, 0, 0, 0,  // address = 0
-            0, 0, 0, 0, 0, 0, 0, 0,  // size = 0
+            0, 0, 0, 0, 0, 0, 0, 0, // address = 0
+            0, 0, 0, 0, 0, 0, 0, 0, // size = 0
         ];
-        
+
         let result = MemoryReservation::parse_all(&data);
         assert!(result.is_ok());
         let (_, reservations) = result.unwrap();
@@ -82,13 +85,13 @@ mod tests {
     fn test_memory_reservation_parse_single() {
         let data = vec![
             // First entry: address=0x1000, size=0x2000
-            0, 0, 0, 0, 0, 0, 0x10, 0,  // address = 0x1000
-            0, 0, 0, 0, 0, 0, 0x20, 0,  // size = 0x2000
+            0, 0, 0, 0, 0, 0, 0x10, 0, // address = 0x1000
+            0, 0, 0, 0, 0, 0, 0x20, 0, // size = 0x2000
             // Terminating entry (0, 0)
-            0, 0, 0, 0, 0, 0, 0, 0,     // address = 0
-            0, 0, 0, 0, 0, 0, 0, 0,     // size = 0
+            0, 0, 0, 0, 0, 0, 0, 0, // address = 0
+            0, 0, 0, 0, 0, 0, 0, 0, // size = 0
         ];
-        
+
         let result = MemoryReservation::parse_all(&data);
         assert!(result.is_ok());
         let (_, reservations) = result.unwrap();
@@ -101,16 +104,16 @@ mod tests {
     fn test_memory_reservation_parse_multiple() {
         let data = vec![
             // First entry: address=0x1000, size=0x2000
-            0, 0, 0, 0, 0, 0, 0x10, 0,  // address = 0x1000
-            0, 0, 0, 0, 0, 0, 0x20, 0,  // size = 0x2000
+            0, 0, 0, 0, 0, 0, 0x10, 0, // address = 0x1000
+            0, 0, 0, 0, 0, 0, 0x20, 0, // size = 0x2000
             // Second entry: address=0x3000, size=0x4000
-            0, 0, 0, 0, 0, 0, 0x30, 0,  // address = 0x3000
-            0, 0, 0, 0, 0, 0, 0x40, 0,  // size = 0x4000
+            0, 0, 0, 0, 0, 0, 0x30, 0, // address = 0x3000
+            0, 0, 0, 0, 0, 0, 0x40, 0, // size = 0x4000
             // Terminating entry (0, 0)
-            0, 0, 0, 0, 0, 0, 0, 0,     // address = 0
-            0, 0, 0, 0, 0, 0, 0, 0,     // size = 0
+            0, 0, 0, 0, 0, 0, 0, 0, // address = 0
+            0, 0, 0, 0, 0, 0, 0, 0, // size = 0
         ];
-        
+
         let result = MemoryReservation::parse_all(&data);
         assert!(result.is_ok());
         let (_, reservations) = result.unwrap();

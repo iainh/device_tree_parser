@@ -5,14 +5,14 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use alloc::string::String;
-
 pub mod dtb;
 pub mod parser;
 
+#[cfg(test)]
+mod integration_tests;
+
 // Re-export main types
-pub use dtb::{DeviceTreeParser, DtbError, DtbHeader, MemoryReservation, DtbToken};
+pub use dtb::{DeviceTreeParser, DtbError, DtbHeader, DtbToken, MemoryReservation};
 
 #[cfg(test)]
 mod tests {
