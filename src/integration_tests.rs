@@ -207,4 +207,60 @@ mod real_dtb_tests {
 
         // DTB size validation passed
     }
+
+    #[test]
+    fn test_qemu_dtb_tree_parsing() {
+        let dtb_data = load_qemu_dtb();
+        let parser = DeviceTreeParser::new(&dtb_data);
+
+        // Parse the complete tree
+        let root = parser.parse_tree().expect("Failed to parse device tree");
+
+        // Verify basic structure
+        assert!(!root.children.is_empty(), "Root should have child nodes");
+
+        // Test that we can iterate over nodes
+        let node_count = root.iter_nodes().count();
+        assert!(node_count > 1, "Should have multiple nodes in tree");
+
+        // Test property access
+        let nodes_with_reg: Vec<_> = root
+            .iter_nodes()
+            .filter(|node| node.has_property("reg"))
+            .collect();
+
+        // There should be multiple nodes with reg properties in a real DTB
+        assert!(
+            !nodes_with_reg.is_empty(),
+            "Should find nodes with reg properties"
+        );
+    }
+
+    #[test]
+    fn test_qemu_dtb_high_level_api() {
+        let dtb_data = load_qemu_dtb();
+        let parser = DeviceTreeParser::new(&dtb_data);
+
+        // Test UART discovery
+        let _uart_addresses = parser
+            .uart_addresses()
+            .expect("Failed to get UART addresses");
+        // QEMU ARM virt machine should have at least one UART
+        // Found UART addresses: {}
+
+        // Test MMIO region discovery
+        let mmio_regions = parser
+            .discover_mmio_regions()
+            .expect("Failed to discover MMIO regions");
+        assert!(
+            !mmio_regions.is_empty(),
+            "Should find MMIO regions in QEMU virt machine"
+        );
+        // Found MMIO regions: {}
+
+        // Test timebase frequency (may or may not be present)
+        let _timebase = parser
+            .timebase_frequency()
+            .expect("Failed to check timebase frequency");
+    }
 }

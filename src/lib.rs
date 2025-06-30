@@ -12,7 +12,10 @@ pub mod parser;
 mod integration_tests;
 
 // Re-export main types
-pub use dtb::{DeviceTreeParser, DtbError, DtbHeader, DtbToken, MemoryReservation};
+pub use dtb::{
+    DeviceTreeNode, DeviceTreeParser, DtbError, DtbHeader, DtbToken, MemoryReservation,
+    NodeIterator, Property, PropertyValue,
+};
 
 #[cfg(test)]
 mod tests {
