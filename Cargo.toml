@@ -1,0 +1,10 @@
+[package]
+name = "device_tree_parser"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "device_tree_parser"
+
+[dependencies]
+nom = { version = "8.0.0", features = ["alloc" ], default-features = false }
