@@ -1,6 +1,68 @@
-# Migration Guide: v0.1.x → v0.2.0
+# Migration Guide
 
-This guide helps you migrate from device_tree_parser v0.1.x to v0.2.0, which introduces zero-copy parsing with lifetime annotations.
+This guide helps you migrate between versions of device_tree_parser.
+
+## v0.2.0 → v0.3.0: Ergonomic API Improvements
+
+Version 0.3.0 adds ergonomic trait implementations while maintaining full backward compatibility. **No breaking changes** - all existing v0.2.0 code continues to work unchanged.
+
+### New Features (Additive Only)
+
+#### Index Traits for Intuitive Access
+```rust
+// New ergonomic ways (v0.3.0+)
+let property = &node["property_name"];  // Instead of node.find_property("property_name")
+let first_child = &node[0];             // Access child by index
+
+// Old ways still work exactly the same
+let property = node.find_property("property_name");
+let first_child = node.children.get(0);
+```
+
+#### IntoIterator for Natural Iteration
+```rust
+// New ergonomic way (v0.3.0+)
+for child in &node {
+    println!("Child: {}", child.name);
+}
+
+// Old way still works
+for child in node.iter_children() {
+    println!("Child: {}", child.name);
+}
+```
+
+#### TryFrom for Type-Safe Conversions
+```rust
+use std::convert::TryFrom;
+
+// New ergonomic ways (v0.3.0+)
+let address: u32 = u32::try_from(&property.value)?;
+let values: Vec<u32> = Vec::<u32>::try_from(&property.value)?;
+let text: &str = <&str>::try_from(&property.value)?;
+let bytes: &[u8] = <&[u8]>::try_from(&property.value)?;
+
+// Old ways still work
+let address = property.as_u32().unwrap_or(0);
+let values = node.prop_u32_array("reg").unwrap_or_default();
+```
+
+#### Display Trait for Pretty Printing
+```rust
+// New in v0.3.0+
+println!("Node: {}", node);      // Pretty prints the node
+println!("Property: {}", prop);  // Pretty prints the property
+```
+
+### Migration Strategy
+
+**Recommended approach**: Gradually adopt new ergonomic APIs in new code while leaving existing code unchanged. All v0.2.0 APIs remain fully functional.
+
+---
+
+## v0.1.x → v0.2.0: Zero-Copy Parsing
+
+This section covers the breaking changes introduced in v0.2.0 for zero-copy parsing with lifetime annotations.
 
 ## Overview of Changes
 

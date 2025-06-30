@@ -7,6 +7,11 @@ A Rust library for parsing device tree files, supporting both binary Device Tree
 - **Binary DTB Parsing**: Parse Device Tree Blob files with full structure validation
 - **Memory Reservation Support**: Handle memory reservation blocks in DTB files
 - **Property Interpolation**: Support for device tree property value parsing and interpolation
+- **Ergonomic API (v0.3.0+)**: Modern Rust trait implementations for intuitive usage
+  - `Index` traits for property and child access: `node["property"]`, `node[0]`
+  - `IntoIterator` for natural iteration: `for child in &node`
+  - `TryFrom` for type-safe value conversions: `u32::try_from(&value)`
+  - `Display` for pretty-printing nodes and properties
 - **Iterator Interface**: Convenient tree traversal with `NodeIterator`
 - **No-std Compatible**: Works in embedded environments with heap allocation
 - **Integration Tested**: Validated against real QEMU-generated DTB files
@@ -17,7 +22,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-device_tree_parser = "0.2.0"
+device_tree_parser = "0.3.0"
 ```
 
 ## Usage
@@ -46,14 +51,53 @@ use device_tree_parser::{DeviceTreeParser, NodeIterator};
 let dtb_data = std::fs::read("your.dtb")?;
 let parser = DeviceTreeParser::new(&dtb_data);
 
-// Iterate through device tree nodes
-for node in parser.nodes() {
-    println!("Node: {}", node.name());
+// Parse the device tree
+let tree = parser.parse_tree()?;
+
+// Iterate through child nodes using ergonomic IntoIterator trait
+for child in &tree {
+    println!("Node: {}", child.name);
     
-    // Access properties
-    for property in node.properties() {
-        println!("  Property: {} = {:?}", property.name(), property.value());
+    // Access properties using Index trait
+    if child.has_property("reg") {
+        println!("  Register: {}", child["reg"].value);
     }
+    
+    // Type-safe property value conversion using TryFrom
+    if let Some(prop) = child.find_property("reg") {
+        if let Ok(values) = Vec::<u32>::try_from(&prop.value) {
+            println!("  Register values: {:?}", values);
+        }
+    }
+}
+```
+
+### Ergonomic API Features (v0.3.0+)
+
+```rust
+use std::convert::TryFrom;
+use device_tree_parser::DeviceTreeParser;
+
+let dtb_data = std::fs::read("your.dtb")?;
+let parser = DeviceTreeParser::new(&dtb_data);
+let tree = parser.parse_tree()?;
+
+// Property access using Index trait
+let model = &tree["model"];  // Instead of tree.find_property("model")
+
+// Child access using Index trait  
+let first_child = &tree[0];  // Access first child node
+
+// Natural iteration over children
+for child in &tree {
+    println!("Child: {}", child.name);
+}
+
+// Type-safe conversions using TryFrom
+if let Some(prop) = tree.find_property("reg") {
+    let address: u32 = u32::try_from(&prop.value)?;
+    let byte_data: &[u8] = <&[u8]>::try_from(&prop.value)?;
+    let string_val: &str = <&str>::try_from(&prop.value)?;
 }
 ```
 
@@ -208,9 +252,18 @@ The library is structured as follows:
 - `DtbHeader` - Device tree blob header
 - `DeviceTreeNode` - Individual device tree nodes
 - `Property` - Device tree properties
-- `PropertyValue` - Typed property values
+- `PropertyValue` - Typed property values with ergonomic trait implementations
 - `MemoryReservation` - Memory reservation entries
 - `NodeIterator` - Iterator for tree traversal
+
+### Ergonomic Traits (v0.3.0+)
+
+- `Index<&str>` for `DeviceTreeNode` - Property access: `node["property_name"]`
+- `Index<usize>` for `DeviceTreeNode` - Child access: `node[0]`
+- `IntoIterator` for `&DeviceTreeNode` - Natural iteration: `for child in &node`
+- `TryFrom<&PropertyValue>` for `u32`, `u64`, `Vec<u32>`, `&str`, `&[u8]` - Type-safe conversions
+- `Display` for `DeviceTreeNode` and `Property` - Pretty-printing
+- `Default` for creating empty instances
 
 ### Error Handling
 
