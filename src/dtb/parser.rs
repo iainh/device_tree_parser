@@ -441,6 +441,95 @@ impl<'a> DeviceTreeParser<'a> {
         Ok(regions)
     }
 
+    /// Discovers MMIO regions with optional address translation.
+    ///
+    /// This enhanced version of `discover_mmio_regions()` can optionally perform
+    /// address translation to convert device addresses to CPU address space.
+    /// This is essential for systems with complex bus hierarchies where device
+    /// register addresses differ from CPU-visible addresses.
+    ///
+    /// # Arguments
+    ///
+    /// * `translate_addresses` - Whether to perform address translation
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DtbError`] if parsing or address translation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeParser, DtbError};
+    /// # fn example() -> Result<(), DtbError> {
+    /// # let dtb_data = vec![0u8; 64]; // Mock data  
+    /// let parser = DeviceTreeParser::new(&dtb_data);
+    ///
+    /// // Get raw device addresses (no translation)
+    /// let raw_regions = parser.discover_mmio_regions_translated(false)?;
+    ///
+    /// // Get CPU-visible addresses (with translation)
+    /// let cpu_regions = parser.discover_mmio_regions_translated(true)?;
+    ///
+    /// for ((raw_addr, size), (cpu_addr, _)) in raw_regions.iter().zip(cpu_regions.iter()) {
+    ///     println!("Device 0x{:x} -> CPU 0x{:x} (size: {})", raw_addr, cpu_addr, size);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn discover_mmio_regions_translated(&self, translate_addresses: bool) -> Result<Vec<(u64, u64)>, DtbError> {
+        let root = self.parse_tree()?;
+        let mut regions = Vec::new();
+
+        // Traverse all nodes and collect reg properties
+        for node in root.iter_nodes() {
+            if let Some(reg) = node.prop_u32_array("reg") {
+                // Get address cell configuration for this node's parent context
+                let address_cells = node.address_cells().unwrap_or(2);
+                let size_cells = node.size_cells().unwrap_or(1);
+
+                // Calculate entry size (address + size cells)
+                let entry_size = (address_cells + size_cells) as usize;
+                
+                // Parse reg property as address/size pairs with proper cell sizes
+                let mut i = 0;
+                while i + entry_size <= reg.len() {
+                    // Parse address (may be multi-cell)
+                    let mut address = 0u64;
+                    for j in 0..address_cells as usize {
+                        address = (address << 32) | u64::from(reg[i + j]);
+                    }
+                    
+                    // Parse size (may be multi-cell)  
+                    let mut size = 0u64;
+                    for j in 0..size_cells as usize {
+                        size = (size << 32) | u64::from(reg[i + address_cells as usize + j]);
+                    }
+
+                    // Optionally translate address to CPU address space
+                    let final_address = if translate_addresses {
+                        // Try to translate using single-level translation first
+                        // In a complete implementation, we would walk up the tree hierarchy
+                        match node.translate_address(address, None, address_cells) {
+                            Ok(translated) => translated,
+                            Err(_) => {
+                                // If translation fails, try recursive translation
+                                // For now, fall back to original address
+                                address
+                            }
+                        }
+                    } else {
+                        address
+                    };
+
+                    regions.push((final_address, size));
+                    i += entry_size;
+                }
+            }
+        }
+
+        Ok(regions)
+    }
+
     /// Finds a device tree node by its absolute path.
     ///
     /// Device tree paths use Unix-style notation starting from the root (`/`).

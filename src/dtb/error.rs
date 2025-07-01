@@ -90,6 +90,19 @@ pub enum DtbError {
     /// (`child_address_cells` + `address_cells` + `size_cells`) * 4 bytes.
     /// This error indicates malformed ranges data.
     InvalidRangesFormat,
+
+    /// Translation cycle detected.
+    ///
+    /// Occurs when multi-level address translation encounters a circular
+    /// reference in the device tree hierarchy, which would cause infinite
+    /// recursion.
+    TranslationCycle,
+
+    /// Maximum translation depth exceeded.
+    ///
+    /// Occurs when multi-level address translation exceeds the maximum
+    /// allowed recursion depth, preventing potential stack overflow.
+    MaxTranslationDepthExceeded,
 }
 
 impl fmt::Display for DtbError {
@@ -110,6 +123,12 @@ impl fmt::Display for DtbError {
             }
             DtbError::InvalidRangesFormat => {
                 write!(f, "Invalid ranges property format")
+            }
+            DtbError::TranslationCycle => {
+                write!(f, "Translation cycle detected in device tree hierarchy")
+            }
+            DtbError::MaxTranslationDepthExceeded => {
+                write!(f, "Maximum translation depth exceeded")
             }
         }
     }
