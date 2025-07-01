@@ -7,7 +7,7 @@ A Rust library for parsing device tree files, supporting both binary Device Tree
 - **Binary DTB Parsing**: Parse Device Tree Blob files with full structure validation
 - **Memory Reservation Support**: Handle memory reservation blocks in DTB files
 - **Property Interpolation**: Support for device tree property value parsing and interpolation
-- **Address Translation**: Full support for device tree address translation between bus domains
+- **Address Translation (v0.4.0+)**: Full support for device tree address translation between bus domains
 - **Ergonomic API (v0.3.0+)**: Modern Rust trait implementations for intuitive usage
   - `Index` traits for property and child access: `node["property"]`, `node[0]`
   - `IntoIterator` for natural iteration: `for child in &node`
@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-device_tree_parser = "0.3.0"
+device_tree_parser = "0.4.0"
 ```
 
 ## Usage
@@ -102,7 +102,7 @@ if let Some(prop) = tree.find_property("reg") {
 }
 ```
 
-### Device Tree Address Translation
+### Device Tree Address Translation (v0.4.0+)
 
 Device trees often contain complex bus hierarchies where device addresses need to be translated to CPU-visible addresses. This library provides comprehensive address translation support:
 
