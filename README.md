@@ -7,6 +7,7 @@ A Rust library for parsing device tree files, supporting both binary Device Tree
 - **Binary DTB Parsing**: Parse Device Tree Blob files with full structure validation
 - **Memory Reservation Support**: Handle memory reservation blocks in DTB files
 - **Property Interpolation**: Support for device tree property value parsing and interpolation
+- **Address Translation**: Full support for device tree address translation between bus domains
 - **Ergonomic API (v0.3.0+)**: Modern Rust trait implementations for intuitive usage
   - `Index` traits for property and child access: `node["property"]`, `node[0]`
   - `IntoIterator` for natural iteration: `for child in &node`
@@ -100,6 +101,80 @@ if let Some(prop) = tree.find_property("reg") {
     let string_val: &str = <&str>::try_from(&prop.value)?;
 }
 ```
+
+### Device Tree Address Translation
+
+Device trees often contain complex bus hierarchies where device addresses need to be translated to CPU-visible addresses. This library provides comprehensive address translation support:
+
+```rust
+use device_tree_parser::{DeviceTreeParser, DtbError};
+
+let dtb_data = std::fs::read("your.dtb")?;
+let parser = DeviceTreeParser::new(&dtb_data);
+let tree = parser.parse_tree()?;
+
+// Enhanced MMIO region discovery with address translation
+let raw_regions = parser.discover_mmio_regions_translated(false)?;      // Device addresses
+let cpu_regions = parser.discover_mmio_regions_translated(true)?;       // CPU addresses
+
+for ((device_addr, size), (cpu_addr, _)) in raw_regions.iter().zip(cpu_regions.iter()) {
+    println!("Device 0x{:x} -> CPU 0x{:x} (size: {} bytes)", 
+             device_addr, cpu_addr, size);
+}
+
+// Find a specific device and translate its registers
+let uart_nodes = tree.find_compatible_nodes("arm,pl011");
+for uart in uart_nodes {
+    // Get CPU-visible MMIO regions for this UART
+    let mmio_regions = uart.mmio_regions(None)?;
+    for (addr, size) in mmio_regions {
+        println!("UART MMIO: 0x{:x} - 0x{:x}", addr, addr + size - 1);
+    }
+    
+    // Manual address translation for specific addresses
+    if uart.has_property("ranges") {
+        // Try translating a specific device address
+        let device_addr = 0x1000;
+        match uart.translate_address(device_addr, None, 2) {
+            Ok(cpu_addr) => println!("Device 0x{:x} -> CPU 0x{:x}", device_addr, cpu_addr),
+            Err(e) => println!("Translation failed: {}", e),
+        }
+        
+        // For complex hierarchies, use recursive translation
+        match uart.translate_address_recursive(device_addr, 2, 10) {
+            Ok(cpu_addr) => println!("Recursive: 0x{:x} -> 0x{:x}", device_addr, cpu_addr),
+            Err(e) => println!("Recursive translation failed: {}", e),
+        }
+    }
+}
+
+// Parse address/size cell specifications
+for node in tree.iter_nodes() {
+    if node.has_property("ranges") {
+        let address_cells = node.address_cells()?;
+        let size_cells = node.size_cells()?;
+        println!("Node '{}': {}+{} address cells", 
+                 node.name, address_cells, size_cells);
+        
+        // Parse the ranges property
+        let ranges = node.ranges(None, address_cells)?;
+        for range in ranges {
+            println!("  Range: 0x{:x} -> 0x{:x} (size: 0x{:x})",
+                     range.child_address(), range.parent_address(), range.size());
+        }
+    }
+}
+```
+
+### Address Translation Features
+
+- **Single-level translation**: `translate_address()` for direct parent-child translation
+- **Multi-level translation**: `translate_address_recursive()` for complex bus hierarchies  
+- **Automatic cell parsing**: Handles variable address/size cell configurations
+- **Range validation**: Comprehensive bounds checking and overflow protection
+- **Error handling**: Detailed error types for translation failures
+- **Helper methods**: Convenient APIs for common translation scenarios
+- **Integration tested**: Validated against real ARM SoC device trees
 
 ## Documentation
 
@@ -255,6 +330,8 @@ The library is structured as follows:
 - `PropertyValue` - Typed property values with ergonomic trait implementations
 - `MemoryReservation` - Memory reservation entries
 - `NodeIterator` - Iterator for tree traversal
+- `AddressSpec` - Address/size cell specifications for device tree addressing
+- `AddressRange` - Address translation range mapping between bus domains
 
 ### Ergonomic Traits (v0.3.0+)
 
