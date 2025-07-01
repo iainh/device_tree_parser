@@ -476,7 +476,10 @@ impl<'a> DeviceTreeParser<'a> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn discover_mmio_regions_translated(&self, translate_addresses: bool) -> Result<Vec<(u64, u64)>, DtbError> {
+    pub fn discover_mmio_regions_translated(
+        &self,
+        translate_addresses: bool,
+    ) -> Result<Vec<(u64, u64)>, DtbError> {
         let root = self.parse_tree()?;
         let mut regions = Vec::new();
 
@@ -489,7 +492,7 @@ impl<'a> DeviceTreeParser<'a> {
 
                 // Calculate entry size (address + size cells)
                 let entry_size = (address_cells + size_cells) as usize;
-                
+
                 // Parse reg property as address/size pairs with proper cell sizes
                 let mut i = 0;
                 while i + entry_size <= reg.len() {
@@ -498,8 +501,8 @@ impl<'a> DeviceTreeParser<'a> {
                     for j in 0..address_cells as usize {
                         address = (address << 32) | u64::from(reg[i + j]);
                     }
-                    
-                    // Parse size (may be multi-cell)  
+
+                    // Parse size (may be multi-cell)
                     let mut size = 0u64;
                     for j in 0..size_cells as usize {
                         size = (size << 32) | u64::from(reg[i + address_cells as usize + j]);

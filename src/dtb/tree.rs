@@ -1087,7 +1087,7 @@ impl<'a> DeviceTreeNode<'a> {
         match self.translate_address(current_address, parent_node, child_address_cells) {
             Ok(translated_address) => {
                 current_address = translated_address;
-                
+
                 // If we successfully translated and have ranges, this is NOT the root.
                 // In a complete implementation, we would continue recursively up the tree.
                 // For now, we'll return the translated address.
@@ -1147,12 +1147,12 @@ impl<'a> DeviceTreeNode<'a> {
         parent: Option<&DeviceTreeNode<'a>>,
     ) -> Result<Vec<(u64, u64)>, DtbError> {
         let mut addresses = Vec::new();
-        
+
         if let Some(reg) = self.prop_u32_array("reg") {
             let address_cells = self.address_cells_with_parent(parent)?;
             let size_cells = self.size_cells_with_parent(parent)?;
             let entry_size = (address_cells + size_cells) as usize;
-            
+
             let mut i = 0;
             while i + entry_size <= reg.len() {
                 // Parse address
@@ -1160,7 +1160,7 @@ impl<'a> DeviceTreeNode<'a> {
                 for j in 0..address_cells as usize {
                     address = (address << 32) | u64::from(reg[i + j]);
                 }
-                
+
                 // Parse size
                 let mut size = 0u64;
                 for j in 0..size_cells as usize {
@@ -1168,14 +1168,15 @@ impl<'a> DeviceTreeNode<'a> {
                 }
 
                 // Translate address
-                let translated_address = self.translate_address(address, parent, address_cells)
+                let translated_address = self
+                    .translate_address(address, parent, address_cells)
                     .unwrap_or(address); // Fall back to original if translation fails
 
                 addresses.push((translated_address, size));
                 i += entry_size;
             }
         }
-        
+
         Ok(addresses)
     }
 
@@ -2943,7 +2944,7 @@ mod tests {
         // The cycle detection will prevent infinite recursion on the same node
         // In this simplified implementation, we test with a call that would
         // attempt to visit the same node multiple times
-        
+
         // Create a scenario where we have ranges but no matching address
         let ranges_data = vec![
             0x00, 0x00, 0x20, 0x00, // child address (0x2000)
@@ -3008,9 +3009,8 @@ mod tests {
         let ranges_data = vec![
             // Child address (0x1000 as 2 cells)
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
-            // Parent address (0x90001000 as 2 cells)  
-            0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x10, 0x00,
-            // Size (0x1000 as 1 cell)
+            // Parent address (0x90001000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x10, 0x00, // Size (0x1000 as 1 cell)
             0x00, 0x00, 0x10, 0x00,
         ];
 
