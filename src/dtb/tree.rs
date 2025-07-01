@@ -793,10 +793,10 @@ impl<'a> DeviceTreeNode<'a> {
         Ok(AddressSpec::DEFAULT_SIZE_CELLS)
     }
 
-    /// Creates an AddressSpec for this node using proper inheritance rules.
+    /// Creates an `AddressSpec` for this node using proper inheritance rules.
     ///
-    /// This is a convenience method that combines address_cells and size_cells
-    /// with parent inheritance support to create a validated AddressSpec.
+    /// This is a convenience method that combines `address_cells` and `size_cells`
+    /// with parent inheritance support to create a validated `AddressSpec`.
     ///
     /// # Arguments
     ///
@@ -872,8 +872,7 @@ impl<'a> DeviceTreeNode<'a> {
         // Get the raw ranges property data
         let ranges_data = match self.find_property("ranges") {
             Some(prop) => match &prop.value {
-                PropertyValue::Bytes(data) => *data,
-                PropertyValue::U32Array(data) => *data,
+                PropertyValue::Bytes(data) | PropertyValue::U32Array(data) => *data,
                 PropertyValue::Empty => {
                     // Empty ranges property means 1:1 mapping
                     return Ok(Vec::new());
@@ -932,6 +931,73 @@ impl<'a> DeviceTreeNode<'a> {
         }
 
         Ok(ranges)
+    }
+
+    /// Translate a child address to the parent address space.
+    ///
+    /// This method performs single-level address translation by finding the
+    /// appropriate range in this node's `ranges` property and translating
+    /// the child address to the parent address space.
+    ///
+    /// # Arguments
+    ///
+    /// * `child_address` - Address in this node's address space to translate
+    /// * `parent` - Optional parent node for cell inheritance
+    /// * `child_address_cells` - Number of cells for child addresses
+    ///
+    /// # Errors
+    ///
+    /// Returns `DtbError::AddressTranslationError` if:
+    /// - No matching range is found for the address
+    /// - The address is outside all defined ranges
+    /// - Address arithmetic would overflow
+    ///
+    /// Returns other errors for cell validation or ranges parsing failures.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use device_tree_parser::{DeviceTreeNode, DtbError};
+    /// # fn example(bus_node: &DeviceTreeNode, parent: Option<&DeviceTreeNode>) -> Result<(), DtbError> {
+    /// // Translate device address 0x1000 to parent bus address space
+    /// let parent_addr = bus_node.translate_address(0x1000, parent, 2)?;
+    /// println!("Child address 0x1000 maps to parent address 0x{:x}", parent_addr);
+    ///
+    /// // If no ranges property exists, returns AddressTranslationError
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn translate_address(
+        &self,
+        child_address: u64,
+        parent: Option<&DeviceTreeNode<'a>>,
+        child_address_cells: u32,
+    ) -> Result<u64, DtbError> {
+        // Get the ranges for this node
+        let ranges = self.ranges(parent, child_address_cells)?;
+
+        // If ranges is empty, this could mean:
+        // 1. Empty ranges property (1:1 mapping) - translate directly
+        // 2. No ranges property - no translation capability
+        if ranges.is_empty() {
+            // Check if ranges property exists but is empty (1:1 mapping)
+            if self.has_property("ranges") {
+                // Empty ranges property means 1:1 address mapping
+                return Ok(child_address);
+            }
+            // No ranges property means this node doesn't provide translation
+            return Err(DtbError::AddressTranslationError(child_address));
+        }
+
+        // Find the range that contains the child address
+        for range in &ranges {
+            if range.contains(child_address) {
+                return range.translate(child_address);
+            }
+        }
+
+        // No matching range found
+        Err(DtbError::AddressTranslationError(child_address))
     }
 
     /// Get all nodes with a specific property
@@ -2263,5 +2329,308 @@ mod tests {
         assert_eq!(range.child_address(), 0x1000);
         assert_eq!(range.parent_address(), 0x80000000);
         assert_eq!(range.size(), 0x1000);
+    }
+
+    #[test]
+    fn test_translate_address_successful() {
+        // Create a node with address translation ranges
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create ranges data: child_addr(2 cells) + parent_addr(2 cells) + size(1 cell)
+        // Range: child=0x1000, parent=0x80001000, size=0x1000
+        let ranges_data = vec![
+            // Child address (0x1000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+            // Parent address (0x80001000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, // Size (0x1000 as 1 cell)
+            0x00, 0x00, 0x10, 0x00,
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        // Test successful translation
+        let translated = node.translate_address(0x1500, None, 2).unwrap();
+        assert_eq!(translated, 0x80001500);
+
+        // Test translation at range boundary (start)
+        let translated = node.translate_address(0x1000, None, 2).unwrap();
+        assert_eq!(translated, 0x80001000);
+
+        // Test translation at range boundary (end - 1)
+        let translated = node.translate_address(0x1FFF, None, 2).unwrap();
+        assert_eq!(translated, 0x80001FFF);
+    }
+
+    #[test]
+    fn test_translate_address_no_matching_range() {
+        // Create a node with address translation ranges
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create ranges data: child=0x1000, parent=0x80001000, size=0x1000
+        let ranges_data = vec![
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, // child address
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, // parent address
+            0x00, 0x00, 0x10, 0x00, // size
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        // Test address outside range (below)
+        assert!(matches!(
+            node.translate_address(0x500, None, 2),
+            Err(DtbError::AddressTranslationError(0x500))
+        ));
+
+        // Test address outside range (above)
+        assert!(matches!(
+            node.translate_address(0x3000, None, 2),
+            Err(DtbError::AddressTranslationError(0x3000))
+        ));
+    }
+
+    #[test]
+    fn test_translate_address_empty_ranges() {
+        // Create a node with empty ranges property (1:1 mapping)
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Empty,
+        });
+
+        // Test 1:1 translation
+        let translated = node.translate_address(0x1234, None, 2).unwrap();
+        assert_eq!(translated, 0x1234);
+
+        let translated = node.translate_address(0x0, None, 2).unwrap();
+        assert_eq!(translated, 0x0);
+    }
+
+    #[test]
+    fn test_translate_address_no_ranges_property() {
+        // Create a node without ranges property
+        let node = DeviceTreeNode::new("test");
+
+        // Should return error for no translation capability
+        assert!(matches!(
+            node.translate_address(0x1000, None, 2),
+            Err(DtbError::AddressTranslationError(0x1000))
+        ));
+    }
+
+    #[test]
+    fn test_translate_address_multiple_ranges() {
+        // Create a node with multiple address translation ranges
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create ranges data with multiple ranges:
+        // Range 1: child=0x0, parent=0x80000000, size=0x10000
+        // Range 2: child=0x20000, parent=0x90000000, size=0x8000
+        let ranges_data = vec![
+            // Range 1: child address (0x0 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // Range 1: parent address (0x80000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+            // Range 1: size (0x10000 as 1 cell)
+            0x00, 0x01, 0x00, 0x00, // Range 2: child address (0x20000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+            // Range 2: parent address (0x90000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00,
+            // Range 2: size (0x8000 as 1 cell)
+            0x00, 0x00, 0x80, 0x00,
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        // Test translation in first range
+        let translated = node.translate_address(0x5000, None, 2).unwrap();
+        assert_eq!(translated, 0x80005000);
+
+        // Test translation in second range
+        let translated = node.translate_address(0x24000, None, 2).unwrap();
+        assert_eq!(translated, 0x90004000);
+
+        // Test address between ranges (should fail)
+        assert!(matches!(
+            node.translate_address(0x15000, None, 2),
+            Err(DtbError::AddressTranslationError(0x15000))
+        ));
+    }
+
+    #[test]
+    fn test_translate_address_with_parent_inheritance() {
+        // Create parent node with address/size cells
+        let mut parent = DeviceTreeNode::new("parent");
+        parent.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(1),
+        });
+        parent.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create child node that inherits parent's cells
+        let mut child = DeviceTreeNode::new("child");
+
+        // Create ranges data: child_addr(2 cells) + parent_addr(1 cell) + size(1 cell)
+        // Range: child=0x1000, parent=0x80000000, size=0x1000
+        let ranges_data = vec![
+            // Child address (0x1000 as 2 cells)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+            // Parent address (0x80000000 as 1 cell)
+            0x80, 0x00, 0x00, 0x00, // Size (0x1000 as 1 cell)
+            0x00, 0x00, 0x10, 0x00,
+        ];
+
+        child.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        // Test translation with parent inheritance
+        let translated = child.translate_address(0x1500, Some(&parent), 2).unwrap();
+        assert_eq!(translated, 0x80000500);
+    }
+
+    #[test]
+    fn test_translate_address_boundary_conditions() {
+        // Create a node with precise range boundaries
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(1),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create ranges data: child=0x1000, parent=0x2000, size=0x1000
+        let ranges_data = vec![
+            // Child address (0x1000 as 1 cell)
+            0x00, 0x00, 0x10, 0x00, // Parent address (0x2000 as 1 cell)
+            0x00, 0x00, 0x20, 0x00, // Size (0x1000 as 1 cell)
+            0x00, 0x00, 0x10, 0x00,
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        // Test exactly at start of range
+        let translated = node.translate_address(0x1000, None, 1).unwrap();
+        assert_eq!(translated, 0x2000);
+
+        // Test exactly at end of range (inclusive)
+        let translated = node.translate_address(0x1FFF, None, 1).unwrap();
+        assert_eq!(translated, 0x2FFF);
+
+        // Test one byte before range (should fail)
+        assert!(matches!(
+            node.translate_address(0xFFF, None, 1),
+            Err(DtbError::AddressTranslationError(0xFFF))
+        ));
+
+        // Test one byte after range (should fail)
+        assert!(matches!(
+            node.translate_address(0x2000, None, 1),
+            Err(DtbError::AddressTranslationError(0x2000))
+        ));
+    }
+
+    #[test]
+    fn test_translate_address_zero_offset() {
+        // Test translation where child and parent addresses have zero offset
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(1),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(1),
+        });
+
+        // Create ranges data: child=0x1000, parent=0x1000, size=0x1000 (no translation)
+        let ranges_data = vec![
+            0x00, 0x00, 0x10, 0x00, // child address
+            0x00, 0x00, 0x10, 0x00, // parent address (same as child)
+            0x00, 0x00, 0x10, 0x00, // size
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        let translated = node.translate_address(0x1500, None, 1).unwrap();
+        assert_eq!(translated, 0x1500); // No translation offset
+    }
+
+    #[test]
+    fn test_translate_address_large_addresses() {
+        // Test with large 64-bit addresses
+        let mut node = DeviceTreeNode::new("test");
+        node.add_property(Property {
+            name: "#address-cells",
+            value: PropertyValue::U32(2),
+        });
+        node.add_property(Property {
+            name: "#size-cells",
+            value: PropertyValue::U32(2),
+        });
+
+        // Create ranges data with large addresses
+        // child=0x100000000, parent=0x200000000, size=0x100000000
+        let ranges_data = vec![
+            // Child address (0x100000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            // Parent address (0x200000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+            // Size (0x100000000 as 2 cells)
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        node.add_property(Property {
+            name: "ranges",
+            value: PropertyValue::Bytes(&ranges_data),
+        });
+
+        let translated = node.translate_address(0x150000000, None, 2).unwrap();
+        assert_eq!(translated, 0x250000000);
     }
 }
