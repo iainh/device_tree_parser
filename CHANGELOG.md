@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-01-07
+
+### Added
+- **Device Tree Address Translation**: Complete support for translating addresses between bus domains
+  - `AddressSpec` struct for handling address/size cell specifications
+  - `AddressRange` struct for parsing and managing address translation ranges
+  - `translate_address()` method for single-level address translation
+  - `translate_address_recursive()` method for multi-level bus hierarchy translation
+  - `translate_reg_addresses()` helper for translating device register addresses
+  - `mmio_regions()` helper for getting CPU-visible MMIO regions
+  - `discover_mmio_regions_translated()` enhanced API for address translation
+- Address translation infrastructure:
+  - Support for variable address/size cell configurations (1-4 cells, 32-128 bits)
+  - Parent node property inheritance for cell specifications
+  - Ranges property parsing with proper field size handling
+  - Empty ranges support for 1:1 address mapping
+  - Overflow protection in address arithmetic
+  - Cycle detection and recursion depth limits for safety
+- Enhanced error handling:
+  - `InvalidAddressCells`, `InvalidSizeCells` error variants
+  - `AddressTranslationError`, `InvalidRangesFormat` error variants  
+  - `TranslationCycle`, `MaxTranslationDepthExceeded` error variants
+- Comprehensive integration tests with real-world DTB address translation scenarios
+
+### Changed
+- Enhanced MMIO region discovery to support both raw device addresses and CPU-translated addresses
+- Updated high-level parser APIs to provide address translation options
+- Improved documentation with comprehensive address translation examples
+- Updated README with detailed address translation usage guide
+
+### Performance
+- Zero-copy address translation implementation
+- Efficient range lookup for address translation
+- No additional memory allocations for translation operations
+
+### Documentation
+- Added comprehensive address translation examples in README
+- Detailed API documentation for all address translation types and methods
+- Integration test examples demonstrating real-world usage
+
 ## [0.3.0] - 2024-06-30
 
 ### Added
@@ -137,7 +177,8 @@ See [MIGRATION.md](MIGRATION.md) for detailed instructions on upgrading from v0.
 - Architecture overview
 - Integration test suite with real DTB data
 
-[unreleased]: https://github.com/user/device_tree_parser/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/user/device_tree_parser/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/user/device_tree_parser/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/user/device_tree_parser/releases/tag/v0.1.0
+[unreleased]: https://github.com/iainh/device_tree_parser/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/iainh/device_tree_parser/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/iainh/device_tree_parser/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/iainh/device_tree_parser/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/iainh/device_tree_parser/releases/tag/v0.1.0
