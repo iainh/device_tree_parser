@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - 2025-01-07
+## [0.4.0] - 2025-06-30
 
 ### Added
 - **Device Tree Address Translation**: Complete support for translating addresses between bus domains
@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detailed API documentation for all address translation types and methods
 - Integration test examples demonstrating real-world usage
 
-## [0.3.0] - 2024-06-30
+## [0.3.0] - 2025-06-30
 
 ### Added
 - **NEW**: Ergonomic trait implementations for improved UX
@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `no_std` compatibility maintained for all new traits
 - No additional memory allocations introduced by trait implementations
 
-## [0.2.0] - 2024-06-30
+## [0.2.0] - 2025-06-30
 
 ### Added
 - Comprehensive benchmark suite using Criterion framework
@@ -148,7 +148,7 @@ See [MIGRATION.md](MIGRATION.md) for detailed instructions on upgrading from v0.
 - Update pattern matching on `PropertyValue` to handle borrowed data
 - Access to `prop_u32_array()` now returns owned `Vec<u32>` instead of borrowed slice
 
-## [0.1.0] - 2024-06-XX
+## [0.1.0] - 2025-06-30
 
 ### Added
 - Initial release with Device Tree Blob (DTB) parsing support
